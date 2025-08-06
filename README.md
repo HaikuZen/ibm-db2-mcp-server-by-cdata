@@ -1,7 +1,7 @@
 # ibm-db2-mcp-server-by-cdata
 CData's Model Context Protocol (MCP) Server for IBM DB2
 
-:heavy_exclamation_mark: This project builds a read-only MCP server. For full read, write, update, delete, and action capabilities and a simplified setup, check out our free [CData MCP Server for IBM DB2 (beta)](https://www.cdata.com/download/download.aspx?sku=EDZK-V&type=beta). 
+:heavy_exclamation_mark: This project builds a read-only MCP server. For full read, write, update, delete, and action capabilities and a simplified setup, check out our free [CData MCP Server for IBM DB2 (beta)](https://www.cdata.com/download/download.aspx?sku=EDZM-V&type=beta). 
 ## Purpose
 We created this read-only MCP Server to allow LLMs (like Claude Desktop) to query live data IBM DB2 supported by the [CData JDBC Driver for IBM DB2](https://www.cdata.com/drivers/db2/jdbc).
 
