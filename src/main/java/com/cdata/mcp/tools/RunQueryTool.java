@@ -29,9 +29,10 @@ public class RunQueryTool implements ITool {
     String description = "The SELECT statement to execute. "
         + "Use the `" + prefix + "_get_tables` tool to get a list of available tables, "
         + "and the `" + prefix + "_get_columns` tool to list table columns. "
-        + "The SQL dialect is mostly based around SQL-92. "
-        + "Identifiers should be quoted using `" + quotes + "` characters. "
-        + "Valid clauses: FROM, INNER JOIN, LEFT JOIN, GROUP BY, ORDER BY, LIMIT/OFFSET. "
+        + "The SQL dialect is IBM DB2 SQL. "
+        + "Qualify tables with their schema (SCHEMA.TABLE). "
+        + "Unquoted identifiers are folded to upper case; quote mixed-case identifiers using `" + quotes + "` characters. "
+        + "Limit rows with FETCH FIRST n ROWS ONLY. "
         + Constants.FORMAT_DESC;
 
     String schema = new JsonSchemaBuilder()
@@ -69,9 +70,30 @@ public class RunQueryTool implements ITool {
   }
 
   private String queryToCsv(Connection cn, String sql) throws SQLException {
+    if (!isReadStatement(sql)) {
+      throw new SQLException("Only SELECT, WITH and VALUES statements are allowed");
+    }
+    // DB2 can modify data from within a query (e.g. SELECT ... FROM FINAL TABLE (INSERT ...)),
+    // so run every query in a transaction that is always rolled back
+    cn.setReadOnly(true);
+    cn.setAutoCommit(false);
     try (Statement st = cn.createStatement()) {
       return CsvUtils.resultSetToCsv(st.executeQuery(sql));
+    } finally {
+      cn.rollback();
     }
+  }
+
+  private static boolean isReadStatement(String sql) {
+    if (sql == null) {
+      return false;
+    }
+    String s = sql.stripLeading();
+    while (s.startsWith("(")) {
+      s = s.substring(1).stripLeading();
+    }
+    String keyword = s.split("[^A-Za-z]", 2)[0].toUpperCase();
+    return keyword.equals("SELECT") || keyword.equals("WITH") || keyword.equals("VALUES");
   }
 
 }

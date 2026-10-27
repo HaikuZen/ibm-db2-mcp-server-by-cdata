@@ -3,9 +3,7 @@ CData's Model Context Protocol (MCP) Server for IBM DB2
 
 :heavy_exclamation_mark: This project builds a read-only MCP server. For full read, write, update, delete, and action capabilities and a simplified setup, check out our [CData MCP Server for IBM DB2](https://www.cdata.com/drivers/db2/download/mcp/). 
 ## Purpose
-We created this read-only MCP Server to allow LLMs (like Claude Desktop) to query live data IBM DB2 supported by the [CData JDBC Driver for IBM DB2](https://www.cdata.com/drivers/db2/jdbc/).
-
-CData JDBC Driver connects to IBM DB2 by exposing them as relational SQL models.
+This read-only MCP Server allows LLMs (like Claude Desktop) to query live IBM DB2 data using IBM's own JDBC driver (`db2jcc4.jar`, the IBM Data Server Driver for JDBC and SQLJ).
 
 This server wraps that driver and makes IBM DB2 data available through a simple MCP interface, so LLMs can retrieve live information by asking natural language questions — no SQL required.
 
@@ -20,37 +18,32 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
       mvn clean install
       ``` 
       This creates the JAR file: CDataMCP-jar-with-dependencies.jar
-2. Download and install the CData JDBC Driver for {source}: [https://www.cdata.com/drivers/db2/download/jdbc](https://www.cdata.com/drivers/db2/download/jdbc/)
-3. License the CData JDBC Driver:
-    * Navigate to the `lib` folder in the installation directory, typically:
-        * (Windows) `C:\Program Files\CData\CData JDBC Driver for IBM DB2\`
-        * (Mac/Linux) `/Applications/CData JDBC Driver for IBM DB2/`
-    * Run the command `java -jar cdata.jdbc.db2.jar --license`
-    * Enter your name, email, and "TRIAL" (or your license key).
-4. Configure your connection to the data source (Salesforce as an example):
-    * Run the command `java -jar cdata.jdbc.db2.jar` to open the Connection String utility.
-      
-      <img src="https://github.com/user-attachments/assets/a5b5237b-79c1-472c-8c2f-3f9eb1ac9627" title="CData JDBC Driver Connectiong String utility." width=384px />
-    * Configure the connection string and click "Test Connection"
-      > **Note:** If the data sources uses OAuth, you will need to authenticate in your browser.
-    * Once successful, copy the connection string for use later.
+3. Obtain the IBM Data Server Driver for JDBC and SQLJ (`db2jcc4.jar`) from [IBM Fix Central](https://www.ibm.com/support/pages/db2-jdbc-driver-versions-and-downloads), or copy it from the `java` folder of an existing DB2 client/server installation.
+4. Locate the license JAR that matches your DB2 server, if one is needed:
+    * **DB2 for Linux, UNIX and Windows** - `db2jcc_license_cu.jar` (shipped with the driver)
+    * **DB2 for z/OS or DB2 for i** - `db2jcc_license_cisuz.jar` (shipped with DB2 Connect), unless the DB2 Connect license is activated on the server
 5. Create a `.prp` file for your JDBC connection (e.g. `ibm-db2.prp`) using the following properties and format:
     * **Prefix** - a prefix to be used for the tools exposed
     * **ServerName** - a name for your server
     * **ServerVersion** - a version for your server
-    * **DriverPath** - the full path to the JAR file for your JDBC driver
-    * **DriverClass** - the name of the JDBC Driver Class (e.g. cdata.jdbc.db2.DB2Driver)
-    * **JdbcUrl** - the JDBC connection string to use with the CData JDBC Driver to connect to your data (copied from above)
-    * **Tables** - leave blank to access all data, otherwise you can explicitly declare the tables you wish to create access for
+    * **DriverPath** - the full path to `db2jcc4.jar`
+    * **LicensePath** - (optional) the full path to the `db2jcc_license_*.jar` file
+    * **DriverClass** - (optional) the JDBC Driver Class, defaults to `com.ibm.db2.jcc.DB2Driver`
+    * **JdbcUrl** - the JDBC URL, in the form `jdbc:db2://host:port/database`. Driver properties can be appended as `:prop1=value1;prop2=value2;` (e.g. `:sslConnection=true;currentSchema=MYSCHEMA;`)
+    * **User** / **Password** - the DB2 credentials
+    * **Tables** - leave blank to access all data, otherwise you can explicitly declare the tables you wish to create access for (e.g. `MYSCHEMA.EMPLOYEE, MYSCHEMA.DEPARTMENT`). DB2 stores unquoted names in upper case.
       ```env
       Prefix=db2
-      ServerName=CDataDB2
+      ServerName=DB2
       ServerVersion=1.0
-      DriverPath=PATH\TO\cdata.jdbc.db2.jar
-      DriverClass=cdata.jdbc.db2.DB2Driver
-      JdbcUrl=jdbc:db2:InitiateOAuth=GETANDREFRESH;
+      DriverPath=/PATH/TO/db2jcc4.jar
+      LicensePath=/PATH/TO/db2jcc_license_cu.jar
+      JdbcUrl=jdbc:db2://localhost:50000/SAMPLE
+      User=db2inst1
+      Password=secret
       Tables=
       ```
+      > **Note:** Use a DB2 user that only has `SELECT` privileges. The server rejects anything other than `SELECT`, `WITH` and `VALUES` statements and rolls back every query's transaction, but a stored procedure or function that commits on its own can get around that. DB2 permissions are the real safeguard.
 
 ## Using the Server with Claude Desktop
 1. Create the config file for Claude Desktop ( claude_desktop_config.json) to add the new MCP server, using the format below. If the file already exists, add the entry to the `mcpServers` in the config file.
@@ -104,10 +97,10 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
 ## Running the Server
 1. Run the follow the command to run the MCP Server on its own
       ```bash
-      java -jar /PATH/TO/CDataMCP-jar-with-dependencies.jar /PATH/TO/Salesforce.prp
+      java -jar /PATH/TO/CDataMCP-jar-with-dependencies.jar /PATH/TO/ibm-db2.prp
 > **Note:** The server uses `stdio` so can only be used with clients that run on the same machine as the server.
 ## Usage Details
-Once the MCP Server is configured, the AI client will be able to use the built-in tools to read, write, update, and delete the underlying data. In general, you do not need to call the tools explicitly. Simply ask the client to answer questions about the underlying data system. For example:
+Once the MCP Server is configured, the AI client will be able to use the built-in tools to read the underlying data. In general, you do not need to call the tools explicitly. Simply ask the client to answer questions about the underlying data system. For example:
 * "What is the correlation between my closed won opportunities and the account industry?"
 * "How many open tickets do I have in the SUPPORT project?"
 * "Can you tell me what calendar events I have today?"
@@ -144,7 +137,8 @@ If you are scripting out the requests sent to the MCP Server instead of using an
     "params": {
         "name": "ibm_db2_get_columns",
         "arguments": {
-            "table":  "Account"
+            "schema": "MYSCHEMA",
+            "table":  "EMPLOYEE"
         }
     }
 }
@@ -159,16 +153,16 @@ If you are scripting out the requests sent to the MCP Server instead of using an
     "params": {
         "name": "ibm_db2_run_query",
         "arguments": {
-            "sql":  "SELECT * FROM [Account] WHERE [IsDeleted] = true"
+            "sql":  "SELECT * FROM MYSCHEMA.EMPLOYEE WHERE WORKDEPT = 'A00' FETCH FIRST 10 ROWS ONLY"
         }
     }
 }
 ```
 
 ## Troubleshooting
-1. If you cannot see your CData MCP Server in Claude Desktop, be sure that you have fully quit Claude Desktop (Windows: use the Task Manager, Mac: use the Activity Monitor)
-2. If Claude Desktop is unable to retrieve data, be sure that you have configured your connection properly. Use the Connection String builder to create the connection string (see above) and copy the connection string into the property (.prp) file.
-3. If you are having trouble connecting to your data source, contact the [CData Support Team](https://www.cdata.com/support/submit.aspx).
+1. If you cannot see your MCP Server in Claude Desktop, be sure that you have fully quit Claude Desktop (Windows: use the Task Manager, Mac: use the Activity Monitor)
+2. If Claude Desktop is unable to retrieve data, be sure that you have configured your connection properly. Check the `JdbcUrl`, `User` and `Password` in the property (.prp) file. A `-4230` license error means the `LicensePath` JAR is missing or does not match your DB2 server.
+3. If you are having trouble connecting to DB2, check the [IBM JDBC driver documentation](https://www.ibm.com/docs/en/db2/11.5?topic=apis-jdbc).
 4. If you are having trouble using the MCP server, or have any other feedback, join the [CData Community](https://community.cdata.com).
 
 ## License

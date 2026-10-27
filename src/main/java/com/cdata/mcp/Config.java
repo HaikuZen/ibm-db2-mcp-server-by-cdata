@@ -21,9 +21,13 @@ public class Config {
   private static final String PREFIX = "Prefix";
   private static final String DRIVER = "DriverClass";
   private static final String DRIVER_JAR = "DriverPath";
+  private static final String LICENSE_JAR = "LicensePath";
+  private static final String USER = "User";
+  private static final String PASSWORD = "Password";
   private static final String JDBC_URL = "JdbcUrl";
   private static final String TABLES = "Tables";
   private static final String LOG_FILE = "LogFile";
+  private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
 
   // following properties will be discovered dynamically from driver
   private static final String ID_QUOTE_OPEN_CHAR = "IDENTIFIER_QUOTE_OPEN_CHAR";
@@ -49,15 +53,15 @@ public class Config {
       result = false;
     }
 
-    if (isNullOrEmpty(getDriver())) {
-      errors.println("The '" + DRIVER + "' option is missing");
+    if (!isNullOrEmpty(getLicenseJar()) && !new File(getLicenseJar()).exists()) {
+      errors.println("The '" + LICENSE_JAR + "' option is not a valid JAR file");
       result = false;
     }
 
     if (isNullOrEmpty(getDriverJar())) {
       errors.println("The '" + DRIVER_JAR + "' option is missing");
       result = false;
-    } else if (!verifyDriverLoad(errors)) {
+    } else if (result && !verifyDriverLoad(errors)) {
       result = false;
     }
 
@@ -83,10 +87,19 @@ public class Config {
     return getPrefix() + "://";
   }
   public String getDriver() {
-    return this.props.getProperty(DRIVER);
+    return this.props.getProperty(DRIVER, DEFAULT_DRIVER);
   }
   public String getDriverJar() {
     return this.props.getProperty(DRIVER_JAR);
+  }
+  public String getLicenseJar() {
+    return this.props.getProperty(LICENSE_JAR);
+  }
+  public String getUser() {
+    return this.props.getProperty(USER);
+  }
+  public String getPassword() {
+    return this.props.getProperty(PASSWORD);
   }
   public String getJdbcUrl() {
     return this.props.getProperty(JDBC_URL);
@@ -130,7 +143,20 @@ public class Config {
   }
 
   public Connection newConnection() throws SQLException {
-    return this.driver.connect(this.getJdbcUrl(), new Properties());
+    Properties info = new Properties();
+    if (!isNullOrEmpty(getUser())) {
+      info.setProperty("user", getUser());
+    }
+    if (!isNullOrEmpty(getPassword())) {
+      info.setProperty("password", getPassword());
+    }
+    Connection cn = this.driver.connect(this.getJdbcUrl(), info);
+    if (cn == null) {
+      // Driver.connect() returns null when the URL is meant for a different driver
+      throw new SQLException("The '" + JDBC_URL + "' option is not accepted by the driver "
+          + "(expected jdbc:db2://host:port/database)");
+    }
+    return cn;
   }
 
   private boolean verifyDriverLoad(PrintStream errors) {
@@ -160,10 +186,14 @@ public class Config {
   }
 
   private void loadDriver() throws Exception {
+    // db2jcc4 looks for the db2jcc_license_*.jar on its own class path
+    List<URL> jars = new ArrayList<>();
+    jars.add(new File(this.getDriverJar()).toURI().toURL());
+    if (!isNullOrEmpty(this.getLicenseJar())) {
+      jars.add(new File(this.getLicenseJar()).toURI().toURL());
+    }
     URLClassLoader ucl = new URLClassLoader(
-        new URL[] {
-            new File(this.getDriverJar()).toURI().toURL(),
-        },
+        jars.toArray(new URL[0]),
         this.getClass().getClassLoader()
     );
     Class dc = ucl.loadClass(this.getDriver());
@@ -186,35 +216,32 @@ public class Config {
   }
 
   private void retrieveDefaultCatalogAndSchema(Connection cn) throws SQLException {
-    DatabaseMetaData meta = cn.getMetaData();
-    try (ResultSet rs = meta.getSchemas()) {
-      rs.next();
-      this.defCatalog = rs.getString("TABLE_CATALOG");
-      this.defSchema = rs.getString("TABLE_SCHEM");
+    retrieveDefaultCatalog(cn);
+    try (Statement st = cn.createStatement()) {
+      try (ResultSet rs = st.executeQuery("VALUES CURRENT SCHEMA")) {
+        if (rs.next()) {
+          this.defSchema = rs.getString(1).trim();
+        }
+      }
     }
   }
 
   private void retrieveDefaultCatalog(Connection cn) throws SQLException {
-    DatabaseMetaData meta = cn.getMetaData();
-    try (ResultSet rs = meta.getCatalogs()) {
-      rs.next();
-      this.defCatalog = rs.getString(1);
-    }
+    // DB2 has no catalogs, so getCatalogs() may be empty; use the connection's own
+    this.defCatalog = cn.getCatalog();
   }
 
   private void retrieveSqlInfo(Connection cn) throws SQLException {
-    try (Statement st = cn.createStatement()) {
-      try (ResultSet rs = st.executeQuery("SELECT NAME, VALUE FROM sys_sqlinfo")) {
-        while (rs.next()) {
-          String key = rs.getString(1);
-          String value = rs.getString(2);
-          if (value == null) {
-            value = "";
-          }
-          this.sqlInfo.put(key, value);
-        }
-      }
+    DatabaseMetaData meta = cn.getMetaData();
+    String quote = meta.getIdentifierQuoteString();
+    // per JDBC, a single space means quoting is not supported
+    if (quote == null || quote.isBlank()) {
+      quote = "";
     }
+    this.sqlInfo.put(ID_QUOTE_OPEN_CHAR, quote);
+    this.sqlInfo.put(ID_QUOTE_CLOSE_CHAR, quote);
+    this.sqlInfo.put(SUPPORTS_MULTIPLE_CATALOGS, meta.supportsCatalogsInDataManipulation() ? "YES" : "NO");
+    this.sqlInfo.put(SUPPORTS_MULTIPLE_SCHEMAS, meta.supportsSchemasInDataManipulation() ? "YES" : "NO");
   }
 
   private List<Table> completeTableList(List<Table> list) throws SQLException {

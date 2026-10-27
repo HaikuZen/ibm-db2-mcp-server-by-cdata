@@ -204,7 +204,8 @@ public class Table {
     }
 
     private boolean isValidChar(char ch) {
-      return Character.isLetter(ch) || Character.isDigit(ch);
+      // DB2 ordinary identifiers may also contain _, $, # and @
+      return Character.isLetterOrDigit(ch) || ch == '_' || ch == '$' || ch == '#' || ch == '@';
     }
     private void skipWhitespace() {
       while (!eof()) {

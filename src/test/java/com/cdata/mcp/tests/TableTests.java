@@ -51,6 +51,13 @@ public class TableTests {
   }
 
   @Test
+  public void db2IdentifierChars() {
+    Table table = Table.parse("MY_SCHEMA.ORDER$ITEMS#1");
+    Assert.assertEquals("MY_SCHEMA", table.schema());
+    Assert.assertEquals("ORDER$ITEMS#1", table.name());
+  }
+
+  @Test
   public void parseList() {
     String list = "[mycatalog].[myschema].mytable, cat2.schm2.t2, cat3.[scm3].t3  ";
     List<Table> tables = Table.parseList(list);
