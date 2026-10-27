@@ -10,16 +10,26 @@ public class CsvUtils {
   public record CsvResult(String csv, int rows, boolean truncated) {
   }
 
+  public interface RowFilter {
+    boolean include(ResultSet rs) throws SQLException;
+  }
+
   public static String resultSetToCsv(ResultSet rs) throws SQLException {
     return resultSetToCsv(rs, null);
   }
 
   public static String resultSetToCsv(ResultSet rs, String[][] columns) throws SQLException {
+    return resultSetToCsv(rs, columns, null);
+  }
+
+  public static String resultSetToCsv(ResultSet rs, String[][] columns, RowFilter filter) throws SQLException {
     CsvWriter csv = new CsvWriter();
     ResultSetMetaData meta = rs.getMetaData();
     writeMeta(csv, meta, columns);
     while (rs.next()) {
-      writeRow(csv, meta, columns, rs);
+      if (filter == null || filter.include(rs)) {
+        writeRow(csv, meta, columns, rs);
+      }
     }
     rs.close();
     return csv.end();

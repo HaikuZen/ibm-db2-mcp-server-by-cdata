@@ -85,6 +85,7 @@ public class RunQueryTool implements ITool {
     // so run every query in a transaction that is always rolled back
     cn.setReadOnly(true);
     cn.setAutoCommit(false);
+    CsvUtils.CsvResult result;
     try (Statement st = cn.createStatement()) {
       st.setQueryTimeout(this.config.getQueryTimeout());
       int maxRows = this.config.getMaxRows();
@@ -92,22 +93,51 @@ public class RunQueryTool implements ITool {
         // one extra row tells us whether the result was cut off
         st.setMaxRows(maxRows + 1);
       }
-      return CsvUtils.limitedResultSetToCsv(st.executeQuery(sql), maxRows);
-    } finally {
-      cn.rollback();
+      result = CsvUtils.limitedResultSetToCsv(st.executeQuery(sql), maxRows);
+    } catch (SQLException | RuntimeException ex) {
+      // report the query's error, not a rollback failure caused by it
+      try {
+        cn.rollback();
+      } catch (SQLException rollbackEx) {
+        ex.addSuppressed(rollbackEx);
+      }
+      throw ex;
     }
+    // on success a failed rollback must be reported: changes may not have been undone
+    cn.rollback();
+    return result;
   }
 
-  private static boolean isReadStatement(String sql) {
+  public static boolean isReadStatement(String sql) {
     if (sql == null) {
       return false;
     }
-    String s = sql.stripLeading();
-    while (s.startsWith("(")) {
-      s = s.substring(1).stripLeading();
-    }
+    String s = skipLeadingCommentsAndParens(sql);
     String keyword = s.split("[^A-Za-z]", 2)[0].toUpperCase();
     return keyword.equals("SELECT") || keyword.equals("WITH") || keyword.equals("VALUES");
+  }
+
+  /** Returns "" when the statement cannot be safely classified. */
+  private static String skipLeadingCommentsAndParens(String sql) {
+    String s = sql;
+    while (true) {
+      s = s.stripLeading();
+      if (s.startsWith("--")) {
+        int eol = s.indexOf('\n');
+        s = eol < 0 ? "" : s.substring(eol + 1);
+      } else if (s.startsWith("/*")) {
+        int end = s.indexOf("*/", 2);
+        // reject nested comments: whether DB2 nests them decides where the statement starts
+        if (end < 0 || s.substring(2, end).contains("/*")) {
+          return "";
+        }
+        s = s.substring(end + 2);
+      } else if (s.startsWith("(")) {
+        s = s.substring(1);
+      } else {
+        return s;
+      }
+    }
   }
 
 }

@@ -34,6 +34,7 @@ public class GetTablesTool implements ITool {
             config.getPrefix() + "_get_tables",
             "Retrieves a list of objects, entities, collections, etc. (as tables) available in the data source. Use the `" + config.getPrefix() + "_get_columns` tool to list available columns on a table. " +
                 "Both `catalog` and `schema` are optional parameters. " +
+                "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. " +
                 Constants.FORMAT_DESC,
             schema
         ),
@@ -67,6 +68,11 @@ public class GetTablesTool implements ITool {
               new McpSchema.TextContent(roles, 1.0, "Default Schema: " + this.config.defaultSchema())
           );
         }
+        if (isNullOrEmpty(schema)) {
+          content.add(
+              new McpSchema.TextContent(roles, 1.0, "Tables in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to list them.")
+          );
+        }
         return new McpSchema.CallToolResult(content, false);
       }
     } catch ( Exception ex ) {
@@ -87,8 +93,20 @@ public class GetTablesTool implements ITool {
     META_COLS.add(new String[] { "REMARKS", "Description" });
 
     DatabaseMetaData meta = cn.getMetaData();
+    // without a schema, DB2 would list thousands of catalog tables and views
+    CsvUtils.RowFilter filter = isNullOrEmpty(schema)
+        ? rs -> !isSystemSchema(rs.getString("TABLE_SCHEM"))
+        : null;
     try (ResultSet rs = meta.getTables(emptyNull(catalog), emptyNull(schema), null, null)) {
-      return CsvUtils.resultSetToCsv(rs, META_COLS.toArray(new String[0][]));
+      return CsvUtils.resultSetToCsv(rs, META_COLS.toArray(new String[0][]), filter);
     }
+  }
+
+  public static boolean isSystemSchema(String schema) {
+    if (schema == null) {
+      return false;
+    }
+    String s = schema.trim().toUpperCase();
+    return s.startsWith("SYS") || s.equals("NULLID") || s.equals("SQLJ");
   }
 }

@@ -128,7 +128,7 @@ Once the MCP Server is configured, the AI client will be able to use the built-i
 The list of tools available and their descriptions follow:
 ### Tools & Descriptions
 In the definitions below, `{servername}` refers to the name of the MCP Server in the config file (e.g. `{classname_dash}` above).
-* `{servername}_get_tables` - Retrieves a list of tables available in the data source. Use the `{servername}_get_columns` tool to list available columns on a table. The output of the tool will be returned in CSV format, with the first line containing column headers.
+* `{servername}_get_tables` - Retrieves a list of tables available in the data source. Use the `{servername}_get_columns` tool to list available columns on a table. Tables in DB2 system schemas (`SYS*`, `NULLID`, `SQLJ`) are only listed when the `schema` argument names one. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_get_columns` - Retrieves a list of columns for a table. Use the `{servername}_get_tables` tool to get a list of available tables. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_run_query` - Execute a SQL SELECT query
 
