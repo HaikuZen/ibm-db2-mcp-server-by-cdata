@@ -140,6 +140,15 @@ public class ConfigTests {
   }
 
   @Test
+  public void defaultSchema() throws Exception {
+    Assert.assertNull(load("Prefix=db2\n").get(0).defaultSchema());
+    Assert.assertNull(load("Prefix=db2\nDefaultSchema=  \n").get(0).defaultSchema());
+    List<Config> configs = load("Instances=a,b\nDefaultSchema=SALES \nb.DefaultSchema=${B_SCHEMA}\n", Map.of("B_SCHEMA", "HR"));
+    Assert.assertEquals("SALES", configs.get(0).defaultSchema());
+    Assert.assertEquals("HR", configs.get(1).defaultSchema());
+  }
+
+  @Test
   public void topLevelPrefixIsNotShared() throws Exception {
     List<Config> configs = load("Instances=a,b\nPrefix=db2\n");
     Assert.assertEquals("a", configs.get(0).getPrefix());

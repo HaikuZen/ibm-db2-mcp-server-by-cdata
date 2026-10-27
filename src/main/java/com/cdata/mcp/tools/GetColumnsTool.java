@@ -25,7 +25,8 @@ public class GetColumnsTool implements ITool {
   public void register(McpServer.SyncSpecification<?> mcp) throws Exception {
     String schema = new JsonSchemaBuilder()
         .addString("catalog", "The catalog name")
-        .addString("schema", "The schema name")
+        .addString("schema", "The schema name (DB2 stores unquoted names in upper case)"
+            + (isNullOrEmpty(config.defaultSchema()) ? "" : "; defaults to `" + config.defaultSchema() + "`"))
         .addString("table", "The table name")
         .required("table")
         .build();
@@ -45,6 +46,9 @@ public class GetColumnsTool implements ITool {
     String catalog = (String)args.get("catalog");
     String schema = (String)args.get("schema");
     String table = (String)args.get("table");
+    if (isNullOrEmpty(schema)) {
+      schema = this.config.defaultSchema();
+    }
 
     this.logger.info("GetColumnsTool({}, {}, {})", catalog, schema, table);
     try {

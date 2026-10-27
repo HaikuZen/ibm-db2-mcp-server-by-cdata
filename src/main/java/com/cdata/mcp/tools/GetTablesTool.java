@@ -26,16 +26,20 @@ public class GetTablesTool implements ITool {
   }
 
   public void register(McpServer.SyncSpecification<?> mcp) throws Exception {
+    String defaultSchema = config.defaultSchema();
+    String schemaHelp = isNullOrEmpty(defaultSchema)
+        ? "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. "
+        : "When `schema` is omitted, tables in the `" + defaultSchema + "` schema are listed; pass `%` to list all schemas except DB2 system schemas (SYS*, NULLID, SQLJ). ";
     String schema = new JsonSchemaBuilder()
         .addString("catalog", "The catalog name")
-        .addString("schema", "The schema name")
+        .addString("schema", "The schema name (DB2 stores unquoted names in upper case)")
         .build();
     mcp.toolCall(
         McpSchema.Tool.builder()
             .name(config.getPrefix() + "_get_tables")
             .description("Retrieves a list of objects, entities, collections, etc. (as tables) available in the data source. Use the `" + config.getPrefix() + "_get_columns` tool to list available columns on a table. " +
                     "Both `catalog` and `schema` are optional parameters. " +
-                    "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. " +
+                    schemaHelp +
                     Constants.FORMAT_DESC)
             .inputSchema(McpJsonDefaults.getMapper(), schema)
             .build(),
@@ -47,6 +51,9 @@ public class GetTablesTool implements ITool {
   public McpSchema.CallToolResult run(Map<String, Object> args) {
     String catalog = (String)args.get("catalog");
     String schema = (String)args.get("schema");
+    if (isNullOrEmpty(schema)) {
+      schema = this.config.defaultSchema();
+    }
 
     this.logger.info("GetTablesTool({}, {})", catalog, schema);
     try {
@@ -62,12 +69,12 @@ public class GetTablesTool implements ITool {
               new McpSchema.TextContent("Default Catalog: " + this.config.defaultCatalog())
           );
         }
-        if (!this.config.supportsMultipleSchemas()) {
+        if (!isNullOrEmpty(this.config.defaultSchema())) {
           content.add(
               new McpSchema.TextContent("Default Schema: " + this.config.defaultSchema())
           );
         }
-        if (isNullOrEmpty(schema)) {
+        if (listsAllSchemas(schema)) {
           content.add(
               new McpSchema.TextContent("Tables in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to list them.")
           );
@@ -93,12 +100,16 @@ public class GetTablesTool implements ITool {
 
     DatabaseMetaData meta = cn.getMetaData();
     // without a schema, DB2 would list thousands of catalog tables and views
-    CsvUtils.RowFilter filter = isNullOrEmpty(schema)
+    CsvUtils.RowFilter filter = listsAllSchemas(schema)
         ? rs -> !isSystemSchema(rs.getString("TABLE_SCHEM"))
         : null;
-    try (ResultSet rs = meta.getTables(emptyNull(catalog), emptyNull(schema), null, null)) {
+    try (ResultSet rs = meta.getTables(emptyNull(catalog), listsAllSchemas(schema) ? null : schema, null, null)) {
       return CsvUtils.resultSetToCsv(rs, META_COLS.toArray(new String[0][]), filter);
     }
+  }
+
+  private static boolean listsAllSchemas(String schema) {
+    return isNullOrEmpty(schema) || schema.equals("%");
   }
 
   public static boolean isSystemSchema(String schema) {

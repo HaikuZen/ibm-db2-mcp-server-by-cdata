@@ -1,6 +1,8 @@
 package com.cdata.mcp.tools;
 
 import com.cdata.mcp.*;
+
+import static com.cdata.mcp.StringUtil.isNullOrEmpty;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -30,7 +32,9 @@ public class RunQueryTool implements ITool {
         + "Use the `" + prefix + "_get_tables` tool to get a list of available tables, "
         + "and the `" + prefix + "_get_columns` tool to list table columns. "
         + "The SQL dialect is IBM DB2 SQL. "
-        + "Qualify tables with their schema (SCHEMA.TABLE). "
+        + (isNullOrEmpty(this.config.defaultSchema())
+            ? "Qualify tables with their schema (SCHEMA.TABLE). "
+            : "Unqualified table names refer to the `" + this.config.defaultSchema() + "` schema; qualify others as SCHEMA.TABLE. ")
         + "Unquoted identifiers are folded to upper case; quote mixed-case identifiers using `" + quotes + "` characters. "
         + "Limit rows with FETCH FIRST n ROWS ONLY. "
         + (this.config.getMaxRows() > 0 ? "At most " + this.config.getMaxRows() + " rows are returned. " : "")

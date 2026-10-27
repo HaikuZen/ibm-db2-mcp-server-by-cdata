@@ -31,6 +31,7 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
     * **DriverClass** - (optional) the JDBC Driver Class, defaults to `com.ibm.db2.jcc.DB2Driver`
     * **JdbcUrl** - the JDBC URL, in the form `jdbc:db2://host:port/database`. Driver properties can be appended as `:prop1=value1;prop2=value2;` (e.g. `:sslConnection=true;currentSchema=MYSCHEMA;`). Adding `retrieveMessagesFromServerOnGetMessage=true;` makes DB2 error messages readable for the AI client
     * **User** / **Password** - the DB2 credentials
+    * **DefaultSchema** - (optional) the schema used by `get_tables` and `get_columns` when no `schema` is given, and the current schema for queries, so unqualified table names resolve to it. Recommended on DB2 for z/OS, where listing every schema is slow and user schemas such as `SYSADM` start with `SYS`. Use upper case unless the schema name was created quoted
     * **MaxRows** - (optional) the maximum number of rows a query returns, defaults to `1000`; `0` means no limit
     * **QueryTimeout** - (optional) the query timeout in seconds, defaults to `60`; `0` means no timeout
     * **PoolSize** - (optional) the number of idle connections kept open for reuse, defaults to `4`; `0` opens a new connection for every request
@@ -141,7 +142,7 @@ Once the MCP Server is configured, the AI client will be able to use the built-i
 The list of tools available and their descriptions follow:
 ### Tools & Descriptions
 In the definitions below, `{servername}` refers to the name of the MCP Server in the config file (e.g. `{classname_dash}` above).
-* `{servername}_get_tables` - Retrieves a list of tables available in the data source. Use the `{servername}_get_columns` tool to list available columns on a table. Tables in DB2 system schemas (`SYS*`, `NULLID`, `SQLJ`) are only listed when the `schema` argument names one. The output of the tool will be returned in CSV format, with the first line containing column headers.
+* `{servername}_get_tables` - Retrieves a list of tables available in the data source. Use the `{servername}_get_columns` tool to list available columns on a table. When `schema` is omitted, the `DefaultSchema` is listed if one is configured (pass `%` to list all schemas); otherwise all schemas are listed except DB2 system schemas (`SYS*`, `NULLID`, `SQLJ`), which are only listed when the `schema` argument names one. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_get_columns` - Retrieves a list of columns for a table. Use the `{servername}_get_tables` tool to get a list of available tables. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_run_query` - Execute a SQL SELECT query
 

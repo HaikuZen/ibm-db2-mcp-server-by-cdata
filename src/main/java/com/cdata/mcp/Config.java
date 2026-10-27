@@ -36,6 +36,7 @@ public class Config {
   private static final String MAX_ROWS = "MaxRows";
   private static final String QUERY_TIMEOUT = "QueryTimeout";
   private static final String POOL_SIZE = "PoolSize";
+  private static final String DEFAULT_SCHEMA = "DefaultSchema";
   private static final int DEFAULT_POOL_SIZE = 4;
   private static final int DEFAULT_MAX_ROWS = 1000;
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
@@ -233,7 +234,12 @@ public class Config {
   public String defaultCatalog() {
     return this.defCatalog;
   }
+  /** The configured DefaultSchema, or the one discovered for drivers without schema support. */
   public String defaultSchema() {
+    String configured = this.props.getProperty(DEFAULT_SCHEMA);
+    if (!isNullOrEmpty(configured) && !configured.isBlank()) {
+      return configured.trim();
+    }
     return this.defSchema;
   }
 
@@ -294,6 +300,12 @@ public class Config {
     }
     if (!isNullOrEmpty(getPassword())) {
       info.setProperty("password", getPassword());
+    }
+    String schema = this.props.getProperty(DEFAULT_SCHEMA);
+    // resolve unqualified names in queries against the default schema, unless the URL sets its own
+    if (!isNullOrEmpty(schema) && !schema.isBlank()
+        && !this.getJdbcUrl().toLowerCase().contains("currentschema=")) {
+      info.setProperty("currentSchema", schema.trim());
     }
     Connection cn = this.driver.connect(this.getJdbcUrl(), info);
     if (cn == null) {

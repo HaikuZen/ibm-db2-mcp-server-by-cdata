@@ -45,7 +45,11 @@ Instances=prod,test
 
 # Production: driver properties go after the database name, each ending with ';'
 # retrieveMessagesFromServerOnGetMessage=true gives readable DB2 error messages
-prod.JdbcUrl=jdbc:db2://prod-db.example.com:50001/SALES:sslConnection=true;currentSchema=SALES;retrieveMessagesFromServerOnGetMessage=true;
+prod.JdbcUrl=jdbc:db2://prod-db.example.com:50001/SALES:sslConnection=true;retrieveMessagesFromServerOnGetMessage=true;
+# Schema used when the AI does not name one: get_tables/get_columns list it, and
+# unqualified table names in queries resolve to it (upper case, as DB2 stores it).
+# Recommended on DB2 for z/OS, where listing every schema is slow.
+prod.DefaultSchema=SALES
 # Password read from the DB2_PROD_PASSWORD environment variable
 prod.Password=${DB2_PROD_PASSWORD}
 # Empty = expose metadata resources for no specific tables (tools still see everything)
