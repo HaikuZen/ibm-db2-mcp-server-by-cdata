@@ -31,10 +31,8 @@ public class ErrorUtil {
 
   /** A tool result flagged as an error, so the client can read it and correct the request. */
   public static McpSchema.CallToolResult toolError(Throwable t) {
-    List<McpSchema.Role> roles = new ArrayList<>();
-    roles.add(McpSchema.Role.USER);
     List<McpSchema.Content> content = new ArrayList<>();
-    content.add(new McpSchema.TextContent(roles, 1.0, "ERROR: " + describe(t)));
-    return new McpSchema.CallToolResult(content, true);
+    content.add(new McpSchema.TextContent("ERROR: " + describe(t)));
+    return McpSchema.CallToolResult.builder().content(content).isError(true).build();
   }
 }

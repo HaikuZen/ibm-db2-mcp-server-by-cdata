@@ -1,6 +1,6 @@
 package com.cdata.mcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 
 import java.util.*;
 
@@ -52,7 +52,7 @@ public class JsonSchemaBuilder {
     obj.put("type", OBJECT);
     obj.put("properties", props);
     obj.put("required", this.required);
-    return new ObjectMapper().writeValueAsString(obj);
+    return McpJsonDefaults.getMapper().writeValueAsString(obj);
   }
 
 

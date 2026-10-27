@@ -1,13 +1,10 @@
 package com.cdata.mcp.tests;
 
 import com.cdata.mcp.JsonSchemaBuilder;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.MapType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class JsonSchemaBuilderTests {
@@ -43,8 +40,6 @@ public class JsonSchemaBuilderTests {
   }
 
   private Map<String, Object> deserialize(String result) throws Exception {
-    TypeFactory factory = TypeFactory.defaultInstance();
-    MapType type = factory.constructMapType(HashMap.class, String.class, Object.class);
-    return new ObjectMapper().readValue(result, type);
+    return McpJsonDefaults.getMapper().readValue(result, Map.class);
   }
 }

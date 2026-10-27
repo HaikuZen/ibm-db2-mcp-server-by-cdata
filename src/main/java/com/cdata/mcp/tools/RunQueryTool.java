@@ -1,9 +1,9 @@
 package com.cdata.mcp.tools;
 
 import com.cdata.mcp.*;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +23,7 @@ public class RunQueryTool implements ITool {
   }
 
   @Override
-  public void register(McpServer.SyncSpec mcp) throws Exception {
+  public void register(McpServer.SyncSpecification<?> mcp) throws Exception {
     String quotes = this.config.getIdentifierQuotes();
     String prefix = this.config.getPrefix();
     String description = "The SELECT statement to execute. "
@@ -39,13 +39,13 @@ public class RunQueryTool implements ITool {
     String schema = new JsonSchemaBuilder()
         .addString("sql", description)
         .build();
-    mcp.tool(
-        new Tool(
-            prefix + "_run_query",
-            "Execute a SQL SELECT statement.",
-            schema
-        ),
-        this::run
+    mcp.toolCall(
+        McpSchema.Tool.builder()
+            .name(prefix + "_run_query")
+            .description("Execute a SQL SELECT statement.")
+            .inputSchema(McpJsonDefaults.getMapper(), schema)
+            .build(),
+        (exchange, request) -> run(request.arguments())
     );
   }
 
@@ -53,23 +53,24 @@ public class RunQueryTool implements ITool {
   public McpSchema.CallToolResult run(Map<String, Object> args) {
     String sql = (String)args.get("sql");
     this.logger.info("RunQueryTool({})", sql);
+    if (!isReadStatement(sql)) {
+      return ErrorUtil.toolError(new SQLException("Only SELECT, WITH and VALUES statements are allowed"));
+    }
     try {
       try (Connection cn = config.newConnection()) {
         List<McpSchema.Content> content = new ArrayList<>();
         CsvUtils.CsvResult result = queryToCsv(cn, sql);
 
-        List<McpSchema.Role> roles = new ArrayList<>();
-        roles.add(McpSchema.Role.USER);
         content.add(
-            new McpSchema.TextContent(roles, 1.0, result.csv())
+            new McpSchema.TextContent(result.csv())
         );
         if (result.truncated()) {
           content.add(
-              new McpSchema.TextContent(roles, 1.0, "Only the first " + result.rows() + " rows were returned. "
+              new McpSchema.TextContent("Only the first " + result.rows() + " rows were returned. "
                   + "Narrow the query with a WHERE clause, aggregates or FETCH FIRST n ROWS ONLY.")
           );
         }
-        return new McpSchema.CallToolResult(content, false);
+        return McpSchema.CallToolResult.builder().content(content).isError(false).build();
       }
     } catch ( Exception ex ) {
       this.logger.warn("RunQueryTool failed: {}", ex.getMessage());
@@ -78,9 +79,6 @@ public class RunQueryTool implements ITool {
   }
 
   private CsvUtils.CsvResult queryToCsv(Connection cn, String sql) throws SQLException {
-    if (!isReadStatement(sql)) {
-      throw new SQLException("Only SELECT, WITH and VALUES statements are allowed");
-    }
     // DB2 can modify data from within a query (e.g. SELECT ... FROM FINAL TABLE (INSERT ...)),
     // so run every query in a transaction that is always rolled back
     cn.setReadOnly(true);

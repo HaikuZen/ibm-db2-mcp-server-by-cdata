@@ -3,6 +3,7 @@ package com.cdata.mcp.tools;
 import com.cdata.mcp.*;
 
 import static com.cdata.mcp.StringUtil.*;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
@@ -24,21 +25,21 @@ public class GetTablesTool implements ITool {
     this.config = config;
   }
 
-  public void register(McpServer.SyncSpec mcp) throws Exception {
+  public void register(McpServer.SyncSpecification<?> mcp) throws Exception {
     String schema = new JsonSchemaBuilder()
         .addString("catalog", "The catalog name")
         .addString("schema", "The schema name")
         .build();
-    mcp.tool(
-        new McpSchema.Tool(
-            config.getPrefix() + "_get_tables",
-            "Retrieves a list of objects, entities, collections, etc. (as tables) available in the data source. Use the `" + config.getPrefix() + "_get_columns` tool to list available columns on a table. " +
-                "Both `catalog` and `schema` are optional parameters. " +
-                "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. " +
-                Constants.FORMAT_DESC,
-            schema
-        ),
-        this::run
+    mcp.toolCall(
+        McpSchema.Tool.builder()
+            .name(config.getPrefix() + "_get_tables")
+            .description("Retrieves a list of objects, entities, collections, etc. (as tables) available in the data source. Use the `" + config.getPrefix() + "_get_columns` tool to list available columns on a table. " +
+                    "Both `catalog` and `schema` are optional parameters. " +
+                    "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. " +
+                    Constants.FORMAT_DESC)
+            .inputSchema(McpJsonDefaults.getMapper(), schema)
+            .build(),
+        (exchange, request) -> run(request.arguments())
     );
   }
 
@@ -53,27 +54,25 @@ public class GetTablesTool implements ITool {
         List<McpSchema.Content> content = new ArrayList<>();
         String csv = tablesToCsv(cn, catalog, schema);
 
-        List<McpSchema.Role> roles = new ArrayList<>();
-        roles.add(McpSchema.Role.USER);
         content.add(
-            new McpSchema.TextContent(roles, 1.0, csv)
+            new McpSchema.TextContent(csv)
         );
         if (!this.config.supportsMultipleCatalogs()) {
           content.add(
-              new McpSchema.TextContent(roles, 1.0, "Default Catalog: " + this.config.defaultCatalog())
+              new McpSchema.TextContent("Default Catalog: " + this.config.defaultCatalog())
           );
         }
         if (!this.config.supportsMultipleSchemas()) {
           content.add(
-              new McpSchema.TextContent(roles, 1.0, "Default Schema: " + this.config.defaultSchema())
+              new McpSchema.TextContent("Default Schema: " + this.config.defaultSchema())
           );
         }
         if (isNullOrEmpty(schema)) {
           content.add(
-              new McpSchema.TextContent(roles, 1.0, "Tables in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to list them.")
+              new McpSchema.TextContent("Tables in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to list them.")
           );
         }
-        return new McpSchema.CallToolResult(content, false);
+        return McpSchema.CallToolResult.builder().content(content).isError(false).build();
       }
     } catch ( Exception ex ) {
       this.logger.warn("GetTablesTool failed: {}", ex.getMessage());

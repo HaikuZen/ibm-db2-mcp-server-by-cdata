@@ -9,17 +9,16 @@ import com.cdata.mcp.resources.TableMetadataResource;
 import com.cdata.mcp.tools.GetColumnsTool;
 import com.cdata.mcp.tools.GetTablesTool;
 import com.cdata.mcp.tools.RunQueryTool;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 
 public class Program {
   
-  private ServerMcpTransport transport;
+  private McpServerTransportProvider transport;
   private List<Config> configs;
   private McpSyncServer mcpServer;
   private static final boolean STDIO = true;
@@ -52,13 +51,18 @@ public class Program {
       System.exit(-1);
     }
 
-    this.transport = new StdioServerTransport(new ObjectMapper());
+    this.transport = new StdioServerTransportProvider(McpJsonDefaults.getMapper());
   }
 
   public void configureMcp() throws Exception {
-    McpServer.SyncSpec spec =
-        McpServer.sync(this.transport)
-            .serverInfo(this.configs.get(0).getServerName(), this.configs.get(0).getServerVersion())
+    this.mcpServer = createServer(this.transport, this.configs);
+  }
+
+  /** Builds the server exposing the tools and resources of every configured instance. */
+  public static McpSyncServer createServer(McpServerTransportProvider transport, List<Config> configs) throws Exception {
+    McpServer.SyncSpecification<?> spec =
+        McpServer.sync(transport)
+            .serverInfo(configs.get(0).getServerName(), configs.get(0).getServerVersion())
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
@@ -67,12 +71,12 @@ public class Program {
                     .build()
             );
 
-    for (Config config : this.configs) {
+    for (Config config : configs) {
       registerResources(config, spec);
       registerTools(config, spec);
     }
 
-    this.mcpServer = spec.build();
+    return spec.build();
   }
 
   public static void main(String[] args) throws Exception {
@@ -103,7 +107,7 @@ public class Program {
     }
   }
 
-  private static void registerResources(Config config, McpServer.SyncSpec mcp) throws SQLException {
+  private static void registerResources(Config config, McpServer.SyncSpecification<?> mcp) throws SQLException {
     List<Table> tables = config.getTables();
     TableMetadataResource resource = new TableMetadataResource(config);
 
@@ -111,7 +115,7 @@ public class Program {
       resource.register(mcp, r);
     }
   }
-  private static void registerTools(Config config, McpServer.SyncSpec mcp) throws Exception {
+  private static void registerTools(Config config, McpServer.SyncSpecification<?> mcp) throws Exception {
     ITool[] tools = new ITool[] {
         new GetTablesTool(config),
         new GetColumnsTool(config),

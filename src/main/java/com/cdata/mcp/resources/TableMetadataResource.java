@@ -27,11 +27,16 @@ public class TableMetadataResource implements IResource {
   }
 
   @Override
-  public void register(McpServer.SyncSpec mcp, Table table) {
+  public void register(McpServer.SyncSpecification<?> mcp, Table table) {
     String uri = config.getMcpScheme() + table.urlPath();
-    McpServerFeatures.SyncResourceRegistration resource = new McpServerFeatures.SyncResourceRegistration(
-        new McpSchema.Resource(uri, table.fullName(), "List of columns for table " + table.fullName(), CsvUtils.MIME, null),
-        this::run
+    McpServerFeatures.SyncResourceSpecification resource = new McpServerFeatures.SyncResourceSpecification(
+        McpSchema.Resource.builder()
+            .uri(uri)
+            .name(table.fullName())
+            .description("List of columns for table " + table.fullName())
+            .mimeType(CsvUtils.MIME)
+            .build(),
+        (exchange, request) -> run(request)
     );
     mcp.resources(resource);
   }
