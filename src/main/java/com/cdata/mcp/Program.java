@@ -98,6 +98,9 @@ public class Program {
       synchronized (p) {
         p.wait();
         p.mcpServer.closeGracefully();
+        for (Config config : p.configs) {
+          config.close();
+        }
       }
     }
   }

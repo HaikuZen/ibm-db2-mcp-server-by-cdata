@@ -31,6 +31,8 @@ public class Config {
   private static final String LOG_FILE = "LogFile";
   private static final String MAX_ROWS = "MaxRows";
   private static final String QUERY_TIMEOUT = "QueryTimeout";
+  private static final String POOL_SIZE = "PoolSize";
+  private static final int DEFAULT_POOL_SIZE = 4;
   private static final int DEFAULT_MAX_ROWS = 1000;
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
@@ -43,6 +45,7 @@ public class Config {
   private Properties props = new Properties();
   private Properties sqlInfo = new Properties();
   private Driver driver;
+  private ConnectionPool pool;
   private String defCatalog;
   private String defSchema;
 
@@ -104,6 +107,9 @@ public class Config {
       result = false;
     }
     if (!verifyNonNegativeInt(QUERY_TIMEOUT, errors)) {
+      result = false;
+    }
+    if (!verifyNonNegativeInt(POOL_SIZE, errors)) {
       result = false;
     }
 
@@ -200,6 +206,11 @@ public class Config {
     return getInt(QUERY_TIMEOUT, DEFAULT_QUERY_TIMEOUT);
   }
 
+  /** Idle connections kept open for reuse; 0 opens a new connection for every request. */
+  public int getPoolSize() {
+    return getInt(POOL_SIZE, DEFAULT_POOL_SIZE);
+  }
+
   private int getInt(String key, int defaultValue) {
     String value = this.props.getProperty(key);
     return isNullOrEmpty(value) ? defaultValue : Integer.parseInt(value.trim());
@@ -228,6 +239,17 @@ public class Config {
   }
 
   public Connection newConnection() throws SQLException {
+    return this.pool.getConnection();
+  }
+
+  /** Closes the idle pooled connections. */
+  public void close() {
+    if (this.pool != null) {
+      this.pool.close();
+    }
+  }
+
+  private Connection openConnection() throws SQLException {
     Properties info = new Properties();
     if (!isNullOrEmpty(getUser())) {
       info.setProperty("user", getUser());
@@ -283,6 +305,7 @@ public class Config {
     );
     Class dc = ucl.loadClass(this.getDriver());
     this.driver = (Driver)dc.getDeclaredConstructor().newInstance();
+    this.pool = new ConnectionPool(this::openConnection, getPoolSize());
 
     loadSqlInfo();
   }

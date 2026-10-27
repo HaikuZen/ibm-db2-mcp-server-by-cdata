@@ -33,6 +33,7 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
     * **User** / **Password** - the DB2 credentials
     * **MaxRows** - (optional) the maximum number of rows a query returns, defaults to `1000`; `0` means no limit
     * **QueryTimeout** - (optional) the query timeout in seconds, defaults to `60`; `0` means no timeout
+    * **PoolSize** - (optional) the number of idle connections kept open for reuse, defaults to `4`; `0` opens a new connection for every request
     * **Tables** - leave blank to access all data, otherwise you can explicitly declare the tables you wish to create access for (e.g. `MYSCHEMA.EMPLOYEE, MYSCHEMA.DEPARTMENT`). DB2 stores unquoted names in upper case.
       ```env
       Prefix=db2

@@ -29,6 +29,8 @@ User=db2reader
 MaxRows=1000
 # Query timeout in seconds (0 = no timeout)
 QueryTimeout=60
+# Idle connections kept open for reuse per instance (0 = new connection per request)
+PoolSize=4
 
 # --- Instances ------------------------------------------------------------
 # Each name becomes the tool prefix (prod_get_tables, test_run_query, ...)

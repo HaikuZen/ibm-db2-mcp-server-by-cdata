@@ -68,6 +68,8 @@ public class ConfigTests {
     Config defaults = load("Prefix=db2\n").get(0);
     Assert.assertEquals(1000, defaults.getMaxRows());
     Assert.assertEquals(60, defaults.getQueryTimeout());
+    Assert.assertEquals(4, defaults.getPoolSize());
+    Assert.assertEquals(0, load("Prefix=db2\nPoolSize=0\n").get(0).getPoolSize());
 
     List<Config> configs = load("Instances=a,b\nMaxRows=50\nb.MaxRows=0\nb.QueryTimeout=5\n");
     Assert.assertEquals(50, configs.get(0).getMaxRows());

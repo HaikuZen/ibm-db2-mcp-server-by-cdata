@@ -43,12 +43,13 @@ public class TableMetadataResource implements IResource {
       Table table = Table.fromUri(args.uri());
 
       try (Connection cn = config.newConnection()) {
-        ResultSet rs = cn.getMetaData().getColumns(emptyNull(table.catalog()), emptyNull(table.schema()), table.name(), null);
-        List<McpSchema.ResourceContents> contents = new ArrayList<>();
-        contents.add(
-            new McpSchema.TextResourceContents(args.uri(), CsvUtils.MIME, CsvUtils.resultSetToCsv(rs, META_COLS))
-        );
-        return new McpSchema.ReadResourceResult(contents);
+        try (ResultSet rs = cn.getMetaData().getColumns(emptyNull(table.catalog()), emptyNull(table.schema()), table.name(), null)) {
+          List<McpSchema.ResourceContents> contents = new ArrayList<>();
+          contents.add(
+              new McpSchema.TextResourceContents(args.uri(), CsvUtils.MIME, CsvUtils.resultSetToCsv(rs, META_COLS))
+          );
+          return new McpSchema.ReadResourceResult(contents);
+        }
       }
     } catch (Exception ex) {
       throw new RuntimeException("Error: " + ErrorUtil.describe(ex));
