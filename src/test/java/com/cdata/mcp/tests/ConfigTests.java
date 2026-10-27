@@ -50,6 +50,39 @@ public class ConfigTests {
   }
 
   @Test
+  public void schemeIsValidForUnderscorePrefix() throws Exception {
+    Config config = load("Prefix=IBM_DB2\n").get(0);
+    Assert.assertEquals("ibm-db2://", config.getMcpScheme());
+    new java.net.URI(config.getMcpScheme() + "/SALES/ORDERS");
+  }
+
+  @Test
+  public void invalidPrefixIsRejected() throws Exception {
+    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+    Assert.assertFalse(load("Prefix=1db2\n").get(0).validate(new java.io.PrintStream(out)));
+    Assert.assertTrue(out.toString().contains("'Prefix' option must start with a letter"));
+  }
+
+  @Test
+  public void queryLimits() throws Exception {
+    Config defaults = load("Prefix=db2\n").get(0);
+    Assert.assertEquals(1000, defaults.getMaxRows());
+    Assert.assertEquals(60, defaults.getQueryTimeout());
+
+    List<Config> configs = load("Instances=a,b\nMaxRows=50\nb.MaxRows=0\nb.QueryTimeout=5\n");
+    Assert.assertEquals(50, configs.get(0).getMaxRows());
+    Assert.assertEquals(0, configs.get(1).getMaxRows());
+    Assert.assertEquals(5, configs.get(1).getQueryTimeout());
+  }
+
+  @Test
+  public void invalidMaxRowsIsRejected() throws Exception {
+    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+    Assert.assertFalse(load("Prefix=db2\nMaxRows=-1\n").get(0).validate(new java.io.PrintStream(out)));
+    Assert.assertTrue(out.toString().contains("'MaxRows' option must be a whole number"));
+  }
+
+  @Test
   public void topLevelPrefixIsNotShared() throws Exception {
     List<Config> configs = load("Instances=a,b\nPrefix=db2\n");
     Assert.assertEquals("a", configs.get(0).getPrefix());

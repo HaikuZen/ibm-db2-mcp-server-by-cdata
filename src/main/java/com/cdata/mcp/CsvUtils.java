@@ -6,6 +6,10 @@ import java.sql.SQLException;
 
 public class CsvUtils {
   public static final String MIME = "text/csv";
+
+  public record CsvResult(String csv, int rows, boolean truncated) {
+  }
+
   public static String resultSetToCsv(ResultSet rs) throws SQLException {
     return resultSetToCsv(rs, null);
   }
@@ -19,6 +23,24 @@ public class CsvUtils {
     }
     rs.close();
     return csv.end();
+  }
+
+  /** Writes at most maxRows rows (0 means no limit) and reports whether more were available. */
+  public static CsvResult limitedResultSetToCsv(ResultSet rs, int maxRows) throws SQLException {
+    try {
+      CsvWriter csv = new CsvWriter();
+      ResultSetMetaData meta = rs.getMetaData();
+      writeMeta(csv, meta, null);
+      int rows = 0;
+      while ((maxRows <= 0 || rows < maxRows) && rs.next()) {
+        writeRow(csv, meta, null, rs);
+        rows++;
+      }
+      boolean truncated = maxRows > 0 && rows == maxRows && rs.next();
+      return new CsvResult(csv.end(), rows, truncated);
+    } finally {
+      rs.close();
+    }
   }
 
   private static void writeMeta(CsvWriter csv, ResultSetMetaData meta, String[][] columns) throws SQLException {

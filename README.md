@@ -23,14 +23,16 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
     * **DB2 for Linux, UNIX and Windows** - `db2jcc_license_cu.jar` (shipped with the driver)
     * **DB2 for z/OS or DB2 for i** - `db2jcc_license_cisuz.jar` (shipped with DB2 Connect), unless the DB2 Connect license is activated on the server
 5. Create a `.prp` file for your JDBC connection (e.g. `ibm-db2.prp`) using the following properties and format. You can start from [`ibm-db2.example.prp`](./ibm-db2.example.prp), which documents every setting:
-    * **Prefix** - a prefix to be used for the tools exposed
+    * **Prefix** - a prefix to be used for the tools exposed; it must start with a letter and contain only letters, digits, `_` or `-`
     * **ServerName** - a name for your server
     * **ServerVersion** - a version for your server
     * **DriverPath** - the full path to `db2jcc4.jar`
     * **LicensePath** - (optional) the full path to the `db2jcc_license_*.jar` file
     * **DriverClass** - (optional) the JDBC Driver Class, defaults to `com.ibm.db2.jcc.DB2Driver`
-    * **JdbcUrl** - the JDBC URL, in the form `jdbc:db2://host:port/database`. Driver properties can be appended as `:prop1=value1;prop2=value2;` (e.g. `:sslConnection=true;currentSchema=MYSCHEMA;`)
+    * **JdbcUrl** - the JDBC URL, in the form `jdbc:db2://host:port/database`. Driver properties can be appended as `:prop1=value1;prop2=value2;` (e.g. `:sslConnection=true;currentSchema=MYSCHEMA;`). Adding `retrieveMessagesFromServerOnGetMessage=true;` makes DB2 error messages readable for the AI client
     * **User** / **Password** - the DB2 credentials
+    * **MaxRows** - (optional) the maximum number of rows a query returns, defaults to `1000`; `0` means no limit
+    * **QueryTimeout** - (optional) the query timeout in seconds, defaults to `60`; `0` means no timeout
     * **Tables** - leave blank to access all data, otherwise you can explicitly declare the tables you wish to create access for (e.g. `MYSCHEMA.EMPLOYEE, MYSCHEMA.DEPARTMENT`). DB2 stores unquoted names in upper case.
       ```env
       Prefix=db2

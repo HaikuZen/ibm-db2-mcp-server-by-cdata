@@ -51,6 +51,22 @@ public class TableTests {
   }
 
   @Test
+  public void uriWithoutCatalog() throws Exception {
+    // DB2 reports no catalog for its tables
+    Table table = Table.fromUri("db2://" + new Table(null, "SALES", "ORDERS").urlPath());
+    Assert.assertFalse(table.hasCatalog());
+    Assert.assertEquals("SALES", table.schema());
+    Assert.assertEquals("ORDERS", table.name());
+  }
+
+  @Test
+  public void uriNamesAreDecodedOnce() throws Exception {
+    Table table = Table.fromUri("db2://" + new Table(null, "MY SCHEMA", "A+B%C").urlPath());
+    Assert.assertEquals("MY SCHEMA", table.schema());
+    Assert.assertEquals("A+B%C", table.name());
+  }
+
+  @Test
   public void db2IdentifierChars() {
     Table table = Table.parse("MY_SCHEMA.ORDER$ITEMS#1");
     Assert.assertEquals("MY_SCHEMA", table.schema());

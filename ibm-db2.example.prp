@@ -24,14 +24,22 @@ LicensePath=/PATH/TO/db2jcc_license_cu.jar
 # Use an account with SELECT privileges only
 User=db2reader
 
+# --- Query limits (shared) -----------------------------------------------
+# Maximum rows a query returns (0 = no limit); the AI is told when results are cut off
+MaxRows=1000
+# Query timeout in seconds (0 = no timeout)
+QueryTimeout=60
+
 # --- Instances ------------------------------------------------------------
 # Each name becomes the tool prefix (prod_get_tables, test_run_query, ...)
 # unless overridden with <instance>.Prefix.
+# Prefixes must start with a letter and contain only letters, digits, '_' or '-'.
 # Remove this line and use unprefixed JdbcUrl/Password/Prefix for a single instance.
 Instances=prod,test
 
 # Production: driver properties go after the database name, each ending with ';'
-prod.JdbcUrl=jdbc:db2://prod-db.example.com:50001/SALES:sslConnection=true;currentSchema=SALES;
+# retrieveMessagesFromServerOnGetMessage=true gives readable DB2 error messages
+prod.JdbcUrl=jdbc:db2://prod-db.example.com:50001/SALES:sslConnection=true;currentSchema=SALES;retrieveMessagesFromServerOnGetMessage=true;
 prod.Password=CHANGE_ME
 # Empty = expose metadata resources for no specific tables (tools still see everything)
 prod.Tables=
@@ -43,3 +51,4 @@ test.User=tester
 test.Password=CHANGE_ME
 # Comma-separated SCHEMA.TABLE list (DB2 stores unquoted names in upper case)
 test.Tables=SALES.ORDERS, SALES.CUSTOMERS
+test.MaxRows=200

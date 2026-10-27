@@ -33,6 +33,7 @@ public class RunQueryTool implements ITool {
         + "Qualify tables with their schema (SCHEMA.TABLE). "
         + "Unquoted identifiers are folded to upper case; quote mixed-case identifiers using `" + quotes + "` characters. "
         + "Limit rows with FETCH FIRST n ROWS ONLY. "
+        + (this.config.getMaxRows() > 0 ? "At most " + this.config.getMaxRows() + " rows are returned. " : "")
         + Constants.FORMAT_DESC;
 
     String schema = new JsonSchemaBuilder()
@@ -55,21 +56,28 @@ public class RunQueryTool implements ITool {
     try {
       try (Connection cn = config.newConnection()) {
         List<McpSchema.Content> content = new ArrayList<>();
-        String csv = queryToCsv(cn, sql);
+        CsvUtils.CsvResult result = queryToCsv(cn, sql);
 
         List<McpSchema.Role> roles = new ArrayList<>();
         roles.add(McpSchema.Role.USER);
         content.add(
-            new McpSchema.TextContent(roles, 1.0, csv)
+            new McpSchema.TextContent(roles, 1.0, result.csv())
         );
+        if (result.truncated()) {
+          content.add(
+              new McpSchema.TextContent(roles, 1.0, "Only the first " + result.rows() + " rows were returned. "
+                  + "Narrow the query with a WHERE clause, aggregates or FETCH FIRST n ROWS ONLY.")
+          );
+        }
         return new McpSchema.CallToolResult(content, false);
       }
     } catch ( Exception ex ) {
-      throw new RuntimeException("ERROR: " + ex.getMessage());
+      this.logger.warn("RunQueryTool failed: {}", ex.getMessage());
+      return ErrorUtil.toolError(ex);
     }
   }
 
-  private String queryToCsv(Connection cn, String sql) throws SQLException {
+  private CsvUtils.CsvResult queryToCsv(Connection cn, String sql) throws SQLException {
     if (!isReadStatement(sql)) {
       throw new SQLException("Only SELECT, WITH and VALUES statements are allowed");
     }
@@ -78,7 +86,13 @@ public class RunQueryTool implements ITool {
     cn.setReadOnly(true);
     cn.setAutoCommit(false);
     try (Statement st = cn.createStatement()) {
-      return CsvUtils.resultSetToCsv(st.executeQuery(sql));
+      st.setQueryTimeout(this.config.getQueryTimeout());
+      int maxRows = this.config.getMaxRows();
+      if (maxRows > 0) {
+        // one extra row tells us whether the result was cut off
+        st.setMaxRows(maxRows + 1);
+      }
+      return CsvUtils.limitedResultSetToCsv(st.executeQuery(sql), maxRows);
     } finally {
       cn.rollback();
     }

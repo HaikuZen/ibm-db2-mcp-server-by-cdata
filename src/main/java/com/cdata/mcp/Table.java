@@ -55,7 +55,10 @@ public class Table {
 
   public static Table fromUri(String uri) throws Exception {
     URI u = new URI(uri);
-    String path = u.getAuthority() + u.getPath();
+    // The authority is null when there is no catalog (prefix:///SCHEMA/TABLE), as on DB2.
+    // Use the raw parts so the names are only decoded once, by UrlUtil.
+    String authority = u.getRawAuthority() == null ? "" : u.getRawAuthority();
+    String path = authority + u.getRawPath();
     String[] parts = path.split("/");
     if (parts.length == 3) {
       return new Table(UrlUtil.decode(parts[0]), UrlUtil.decode(parts[1]), UrlUtil.decode(parts[2]));

@@ -11,6 +11,8 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.cdata.mcp.StringUtil.emptyNull;
+
 public class TableMetadataResource implements IResource {
   private Config config;
   private static final String[][] META_COLS = new String[][] {
@@ -41,7 +43,7 @@ public class TableMetadataResource implements IResource {
       Table table = Table.fromUri(args.uri());
 
       try (Connection cn = config.newConnection()) {
-        ResultSet rs = cn.getMetaData().getColumns(table.catalog(), table.schema(), table.name(), null);
+        ResultSet rs = cn.getMetaData().getColumns(emptyNull(table.catalog()), emptyNull(table.schema()), table.name(), null);
         List<McpSchema.ResourceContents> contents = new ArrayList<>();
         contents.add(
             new McpSchema.TextResourceContents(args.uri(), CsvUtils.MIME, CsvUtils.resultSetToCsv(rs, META_COLS))
@@ -49,7 +51,7 @@ public class TableMetadataResource implements IResource {
         return new McpSchema.ReadResourceResult(contents);
       }
     } catch (Exception ex) {
-      throw new RuntimeException("Error: " + ex.getMessage());
+      throw new RuntimeException("Error: " + ErrorUtil.describe(ex));
     }
   }
 

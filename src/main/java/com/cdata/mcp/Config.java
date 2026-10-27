@@ -29,6 +29,10 @@ public class Config {
   private static final String JDBC_URL = "JdbcUrl";
   private static final String TABLES = "Tables";
   private static final String LOG_FILE = "LogFile";
+  private static final String MAX_ROWS = "MaxRows";
+  private static final String QUERY_TIMEOUT = "QueryTimeout";
+  private static final int DEFAULT_MAX_ROWS = 1000;
+  private static final int DEFAULT_QUERY_TIMEOUT = 60;
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
 
   // following properties will be discovered dynamically from driver
@@ -90,6 +94,17 @@ public class Config {
     if (isNullOrEmpty(getPrefix())) {
       errors.println("The '" + PREFIX + "' option is missing");
       result = false;
+    } else if (!getPrefix().matches("[A-Za-z][A-Za-z0-9_-]*")) {
+      // the prefix is used in tool names and resource URIs
+      errors.println("The '" + PREFIX + "' option must start with a letter and contain only letters, digits, '_' or '-'");
+      result = false;
+    }
+
+    if (!verifyNonNegativeInt(MAX_ROWS, errors)) {
+      result = false;
+    }
+    if (!verifyNonNegativeInt(QUERY_TIMEOUT, errors)) {
+      result = false;
     }
 
     if (!isNullOrEmpty(getLicenseJar()) && !new File(getLicenseJar()).exists()) {
@@ -123,7 +138,8 @@ public class Config {
     return this.props.getProperty(PREFIX);
   }
   public String getMcpScheme() {
-    return getPrefix() + "://";
+    // URI schemes cannot contain '_'
+    return getPrefix().toLowerCase().replace('_', '-') + "://";
   }
   public String getDriver() {
     return this.props.getProperty(DRIVER, DEFAULT_DRIVER);
@@ -172,6 +188,36 @@ public class Config {
 
   public String getLogFile() {
     return this.props.getProperty(LOG_FILE);
+  }
+
+  /** Maximum rows returned by a query; 0 means no limit. */
+  public int getMaxRows() {
+    return getInt(MAX_ROWS, DEFAULT_MAX_ROWS);
+  }
+
+  /** Query timeout in seconds; 0 means no timeout. */
+  public int getQueryTimeout() {
+    return getInt(QUERY_TIMEOUT, DEFAULT_QUERY_TIMEOUT);
+  }
+
+  private int getInt(String key, int defaultValue) {
+    String value = this.props.getProperty(key);
+    return isNullOrEmpty(value) ? defaultValue : Integer.parseInt(value.trim());
+  }
+
+  private boolean verifyNonNegativeInt(String key, PrintStream errors) {
+    String value = this.props.getProperty(key);
+    if (isNullOrEmpty(value)) {
+      return true;
+    }
+    try {
+      if (Integer.parseInt(value.trim()) >= 0) {
+        return true;
+      }
+    } catch (NumberFormatException ex) {
+    }
+    errors.println("The '" + key + "' option must be a whole number of 0 or more");
+    return false;
   }
 
   public String quoteIdentifier(String id) {

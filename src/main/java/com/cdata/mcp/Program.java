@@ -37,13 +37,14 @@ public class Program {
     }
     boolean valid = true;
     Set<String> prefixes = new HashSet<>();
+    Set<String> schemes = new HashSet<>();
     for (Config config : this.configs) {
       if (!config.validate(System.err)) {
         System.err.println("Instance '" + config.getPrefix() + "' is not configured correctly");
         valid = false;
-      } else if (!prefixes.add(config.getPrefix())) {
+      } else if (!prefixes.add(config.getPrefix()) | !schemes.add(config.getMcpScheme())) {
         // tool names and resource URIs are derived from the prefix, so it must be unique
-        System.err.println("The '" + config.getPrefix() + "' prefix is used by more than one instance");
+        System.err.println("The '" + config.getPrefix() + "' prefix conflicts with another instance's prefix");
         valid = false;
       }
     }
