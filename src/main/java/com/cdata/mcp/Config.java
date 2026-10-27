@@ -18,6 +18,8 @@ import java.util.Properties;
 import static com.cdata.mcp.StringUtil.isNullOrEmpty;
 
 public class Config {
+  private static final String INSTANCES = "Instances";
+  private static final String SERVER_NAME = "ServerName";
   private static final String PREFIX = "Prefix";
   private static final String DRIVER = "DriverClass";
   private static final String DRIVER_JAR = "DriverPath";
@@ -40,10 +42,47 @@ public class Config {
   private String defCatalog;
   private String defSchema;
 
-  public void load(String filepath) throws IOException {
+  public Config() {
+  }
+
+  private Config(Properties props) {
+    this.props = props;
+  }
+
+  /**
+   * Loads one Config per DB2 instance. If the file has no 'Instances' list it describes
+   * a single instance. Otherwise each listed instance reads its settings from keys
+   * prefixed with its name (e.g. prod.JdbcUrl), falling back to the unprefixed keys,
+   * and its Prefix defaults to the instance name.
+   */
+  public static List<Config> loadAll(String filepath) throws IOException {
+    Properties all = new Properties();
     try (FileInputStream fis = new FileInputStream(filepath)) {
-      props.load(fis);
+      all.load(fis);
     }
+    List<Config> result = new ArrayList<>();
+    String instances = all.getProperty(INSTANCES);
+    if (isNullOrEmpty(instances)) {
+      result.add(new Config(all));
+      return result;
+    }
+    for (String name : instances.split(",")) {
+      name = name.trim();
+      if (name.isEmpty()) {
+        continue;
+      }
+      String keyPrefix = name + ".";
+      Properties merged = new Properties();
+      merged.putAll(all);
+      merged.setProperty(PREFIX, name);
+      for (String key : all.stringPropertyNames()) {
+        if (key.startsWith(keyPrefix)) {
+          merged.setProperty(key.substring(keyPrefix.length()), all.getProperty(key));
+        }
+      }
+      result.add(new Config(merged));
+    }
+    return result;
   }
 
   public boolean validate(PrintStream errors) {
@@ -75,7 +114,7 @@ public class Config {
   }
 
   public String getServerName() {
-    return this.getPrefix();
+    return this.props.getProperty(SERVER_NAME, this.getPrefix());
   }
   public String getServerVersion() {
     return "1.0";

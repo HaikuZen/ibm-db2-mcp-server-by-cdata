@@ -1,0 +1,45 @@
+# Example configuration for the IBM DB2 MCP Server.
+# Copy this file (e.g. to ibm-db2.prp), fill in your values and pass its path to the server:
+#   java -jar CDataMCP-jar-with-dependencies.jar /PATH/TO/ibm-db2.prp
+#
+# Settings without an instance prefix are shared by every instance listed in 'Instances'.
+# Any of them can be overridden per instance as <instance>.<Setting>.
+
+# --- Server ---------------------------------------------------------------
+ServerName=DB2
+ServerVersion=1.0
+# Uncomment to write debug logs to a file (stdout is reserved for MCP traffic)
+#LogFile=/PATH/TO/db2-mcp.log
+
+# --- Driver (shared) ------------------------------------------------------
+# IBM Data Server Driver for JDBC and SQLJ
+DriverPath=/PATH/TO/db2jcc4.jar
+# License JAR: db2jcc_license_cu.jar for DB2 LUW,
+# db2jcc_license_cisuz.jar for DB2 for z/OS or DB2 for i
+LicensePath=/PATH/TO/db2jcc_license_cu.jar
+# Optional, this is the default
+#DriverClass=com.ibm.db2.jcc.DB2Driver
+
+# --- Credentials (shared) -------------------------------------------------
+# Use an account with SELECT privileges only
+User=db2reader
+
+# --- Instances ------------------------------------------------------------
+# Each name becomes the tool prefix (prod_get_tables, test_run_query, ...)
+# unless overridden with <instance>.Prefix.
+# Remove this line and use unprefixed JdbcUrl/Password/Prefix for a single instance.
+Instances=prod,test
+
+# Production: driver properties go after the database name, each ending with ';'
+prod.JdbcUrl=jdbc:db2://prod-db.example.com:50001/SALES:sslConnection=true;currentSchema=SALES;
+prod.Password=CHANGE_ME
+# Empty = expose metadata resources for no specific tables (tools still see everything)
+prod.Tables=
+
+# Test: different user and a custom tool prefix
+test.Prefix=db2test
+test.JdbcUrl=jdbc:db2://test-db.example.com:50000/SALES
+test.User=tester
+test.Password=CHANGE_ME
+# Comma-separated SCHEMA.TABLE list (DB2 stores unquoted names in upper case)
+test.Tables=SALES.ORDERS, SALES.CUSTOMERS

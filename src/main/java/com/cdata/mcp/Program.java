@@ -1,7 +1,9 @@
 package com.cdata.mcp;
 
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.cdata.mcp.resources.TableMetadataResource;
 import com.cdata.mcp.tools.GetColumnsTool;
@@ -18,18 +20,34 @@ import io.modelcontextprotocol.spec.ServerMcpTransport;
 public class Program {
   
   private ServerMcpTransport transport;
-  private Config config;
+  private List<Config> configs;
   private McpSyncServer mcpServer;
   private static final boolean STDIO = true;
 
   public void init(String configPath) throws Exception {
-    this.config = new Config();
-    this.config.load(configPath);
-    if (!StringUtil.isNullOrEmpty(this.config.getLogFile())) {
-      System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
-      System.setProperty("org.slf4j.simpleLogger.logFile", this.config.getLogFile());
+    this.configs = Config.loadAll(configPath);
+    if (this.configs.isEmpty()) {
+      System.err.println("The 'Instances' option does not list any instance");
+      System.exit(-1);
     }
-    if (!this.config.validate(System.err)) {
+    Config first = this.configs.get(0);
+    if (!StringUtil.isNullOrEmpty(first.getLogFile())) {
+      System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
+      System.setProperty("org.slf4j.simpleLogger.logFile", first.getLogFile());
+    }
+    boolean valid = true;
+    Set<String> prefixes = new HashSet<>();
+    for (Config config : this.configs) {
+      if (!config.validate(System.err)) {
+        System.err.println("Instance '" + config.getPrefix() + "' is not configured correctly");
+        valid = false;
+      } else if (!prefixes.add(config.getPrefix())) {
+        // tool names and resource URIs are derived from the prefix, so it must be unique
+        System.err.println("The '" + config.getPrefix() + "' prefix is used by more than one instance");
+        valid = false;
+      }
+    }
+    if (!valid) {
       System.exit(-1);
     }
 
@@ -39,7 +57,7 @@ public class Program {
   public void configureMcp() throws Exception {
     McpServer.SyncSpec spec =
         McpServer.sync(this.transport)
-            .serverInfo(this.config.getServerName(), this.config.getServerVersion())
+            .serverInfo(this.configs.get(0).getServerName(), this.configs.get(0).getServerVersion())
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
@@ -48,8 +66,10 @@ public class Program {
                     .build()
             );
 
-    registerResources(this.config, spec);
-    registerTools(this.config, spec);
+    for (Config config : this.configs) {
+      registerResources(config, spec);
+      registerTools(config, spec);
+    }
 
     this.mcpServer = spec.build();
   }

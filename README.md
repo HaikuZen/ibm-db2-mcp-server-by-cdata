@@ -22,7 +22,7 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
 4. Locate the license JAR that matches your DB2 server, if one is needed:
     * **DB2 for Linux, UNIX and Windows** - `db2jcc_license_cu.jar` (shipped with the driver)
     * **DB2 for z/OS or DB2 for i** - `db2jcc_license_cisuz.jar` (shipped with DB2 Connect), unless the DB2 Connect license is activated on the server
-5. Create a `.prp` file for your JDBC connection (e.g. `ibm-db2.prp`) using the following properties and format:
+5. Create a `.prp` file for your JDBC connection (e.g. `ibm-db2.prp`) using the following properties and format. You can start from [`ibm-db2.example.prp`](./ibm-db2.example.prp), which documents every setting:
     * **Prefix** - a prefix to be used for the tools exposed
     * **ServerName** - a name for your server
     * **ServerVersion** - a version for your server
@@ -44,6 +44,24 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
       Tables=
       ```
       > **Note:** Use a DB2 user that only has `SELECT` privileges. The server rejects anything other than `SELECT`, `WITH` and `VALUES` statements and rolls back every query's transaction, but a stored procedure or function that commits on its own can get around that. DB2 permissions are the real safeguard.
+6. (Optional) To expose several DB2 instances from one server, list them in **Instances** and prefix each instance's properties with its name. Properties without a prefix are shared by all instances, and each instance's **Prefix** defaults to its name, so its tools are named e.g. `prod_run_query` and `test_run_query`:
+      ```env
+      ServerName=DB2
+      ServerVersion=1.0
+      DriverPath=/PATH/TO/db2jcc4.jar
+      LicensePath=/PATH/TO/db2jcc_license_cu.jar
+      User=db2reader
+      Instances=prod,test
+
+      prod.JdbcUrl=jdbc:db2://prod-host:50000/SALES
+      prod.Password=secret1
+
+      test.JdbcUrl=jdbc:db2://test-host:50000/SALES
+      test.User=tester
+      test.Password=secret2
+      test.Tables=SALES.ORDERS
+      ```
+      > **Note:** Every instance must be reachable when the server starts; if any instance fails to connect, the server exits.
 
 ## Using the Server with Claude Desktop
 1. Create the config file for Claude Desktop ( claude_desktop_config.json) to add the new MCP server, using the format below. If the file already exists, add the entry to the `mcpServers` in the config file.
