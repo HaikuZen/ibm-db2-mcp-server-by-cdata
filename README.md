@@ -47,6 +47,8 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
       Tables=
       ```
       > **Note:** Use a DB2 user that only has `SELECT` privileges. The server rejects anything other than `SELECT`, `WITH` and `VALUES` statements and rolls back every query's transaction, but a stored procedure or function that commits on its own can get around that. DB2 permissions are the real safeguard.
+
+      > **Tip:** To keep secrets out of the file, any value can reference an environment variable as `${NAME}`, e.g. `Password=${DB2_PASSWORD}` or `JdbcUrl=jdbc:db2://${DB2_HOST}:50000/SALES`. Plain values work as before. The server will not start if a referenced variable is not set. Write `$${NAME}` for a literal `${NAME}`.
 6. (Optional) To expose several DB2 instances from one server, list them in **Instances** and prefix each instance's properties with its name. Properties without a prefix are shared by all instances, and each instance's **Prefix** defaults to its name, so its tools are named e.g. `prod_run_query` and `test_run_query`:
       ```env
       ServerName=DB2
@@ -99,6 +101,16 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
             ]
           },
           ...
+        }
+      }
+      ```
+      If the `.prp` file references environment variables (e.g. `Password=${DB2_PASSWORD}`), you can set them for the server in the same entry:
+      ```json
+      "{classname_dash}": {
+        "command": "/PATH/TO/java",
+        "args": ["-jar", "/PATH/TO/CDataMCP-jar-with-dependencies.jar", "/PATH/TO/ibm-db2.prp"],
+        "env": {
+          "DB2_PASSWORD": "secret"
         }
       }
       ```

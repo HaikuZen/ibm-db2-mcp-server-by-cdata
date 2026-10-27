@@ -4,16 +4,29 @@ import com.cdata.mcp.Config;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 
 public class ConfigTests {
   private static List<Config> load(String text) throws Exception {
+    return load(text, Map.of());
+  }
+
+  private static List<Config> load(String text, Map<String, String> env) throws Exception {
     File f = File.createTempFile("config", ".prp");
     f.deleteOnExit();
     Files.writeString(f.toPath(), text);
-    return Config.loadAll(f.getPath());
+    return Config.loadAll(f.getPath(), env);
+  }
+
+  private static String validationErrors(Config config) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    config.validate(new PrintStream(out));
+    return out.toString();
   }
 
   @Test
@@ -82,6 +95,48 @@ public class ConfigTests {
     java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
     Assert.assertFalse(load("Prefix=db2\nMaxRows=-1\n").get(0).validate(new java.io.PrintStream(out)));
     Assert.assertTrue(out.toString().contains("'MaxRows' option must be a whole number"));
+  }
+
+  @Test
+  public void plainValuesAreUnchanged() throws Exception {
+    Config config = load("Prefix=db2\nPassword=pa$$word\n", Map.of("X", "y")).get(0);
+    Assert.assertEquals("pa$$word", config.getPassword());
+  }
+
+  @Test
+  public void environmentVariablesAreExpanded() throws Exception {
+    Config config = load(
+        "Prefix=db2\nUser=${DB2_USER}\nPassword=${DB2_PASSWORD}\n"
+            + "JdbcUrl=jdbc:db2://${DB2_HOST}:50000/SALES\n",
+        Map.of("DB2_USER", "reader", "DB2_PASSWORD", "s3cr$t\\1", "DB2_HOST", "db.example.com")).get(0);
+    Assert.assertEquals("reader", config.getUser());
+    Assert.assertEquals("s3cr$t\\1", config.getPassword());
+    Assert.assertEquals("jdbc:db2://db.example.com:50000/SALES", config.getJdbcUrl());
+  }
+
+  @Test
+  public void escapedVariableIsLiteral() throws Exception {
+    Config config = load("Prefix=db2\nPassword=ab$${NOT_A_VAR}cd\n", Map.of("NOT_A_VAR", "x")).get(0);
+    Assert.assertEquals("ab${NOT_A_VAR}cd", config.getPassword());
+  }
+
+  @Test
+  public void missingVariableIsReported() throws Exception {
+    Config config = load("Prefix=db2\nPassword=${DB2_PASSWORD}\n").get(0);
+    Assert.assertTrue(validationErrors(config).contains(
+        "The 'Password' option uses the environment variable 'DB2_PASSWORD', which is not set"));
+  }
+
+  @Test
+  public void variablesArePerInstance() throws Exception {
+    List<Config> configs = load(
+        "Instances=prod,test\nPassword=${SHARED_PASSWORD}\n"
+            + "prod.Password=${PROD_PASSWORD}\ntest.Password=${TEST_PASSWORD}\n",
+        Map.of("PROD_PASSWORD", "p1"));
+    Assert.assertEquals("p1", configs.get(0).getPassword());
+    // prod overrides the shared password, so the unset SHARED_PASSWORD is not an error for it
+    Assert.assertFalse(validationErrors(configs.get(0)).contains("environment variable"));
+    Assert.assertTrue(validationErrors(configs.get(1)).contains("'TEST_PASSWORD'"));
   }
 
   @Test

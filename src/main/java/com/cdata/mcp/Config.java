@@ -16,6 +16,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.cdata.mcp.StringUtil.isNullOrEmpty;
 
@@ -39,10 +41,14 @@ public class Config {
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
 
+  // ${NAME} reads an environment variable; $${NAME} is a literal ${NAME}
+  private static final Pattern VARIABLE = Pattern.compile("\\$(\\$)?\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+
   // instances using the same JARs and driver class share one loaded driver
   private static final Map<List<String>, Driver> DRIVERS = new HashMap<>();
 
   private Properties props = new Properties();
+  private List<String> variableErrors = new ArrayList<>();
   private Driver driver;
   // discovered from the driver's metadata
   private String identifierQuote;
@@ -55,8 +61,10 @@ public class Config {
   public Config() {
   }
 
-  private Config(Properties props) {
-    this.props = props;
+  private Config(Properties props, Map<String, String> env) {
+    for (String key : props.stringPropertyNames()) {
+      this.props.setProperty(key, expandVariables(key, props.getProperty(key), env));
+    }
   }
 
   /**
@@ -66,6 +74,11 @@ public class Config {
    * and its Prefix defaults to the instance name.
    */
   public static List<Config> loadAll(String filepath) throws IOException {
+    return loadAll(filepath, System.getenv());
+  }
+
+  /** Like {@link #loadAll(String)}, resolving ${NAME} references from the given variables. */
+  public static List<Config> loadAll(String filepath, Map<String, String> env) throws IOException {
     Properties all = new Properties();
     try (FileInputStream fis = new FileInputStream(filepath)) {
       all.load(fis);
@@ -73,30 +86,62 @@ public class Config {
     List<Config> result = new ArrayList<>();
     String instances = all.getProperty(INSTANCES);
     if (isNullOrEmpty(instances)) {
-      result.add(new Config(all));
+      result.add(new Config(all, env));
       return result;
     }
+    List<String> names = new ArrayList<>();
     for (String name : instances.split(",")) {
-      name = name.trim();
-      if (name.isEmpty()) {
-        continue;
+      if (!name.trim().isEmpty()) {
+        names.add(name.trim());
       }
+    }
+    for (String name : names) {
       String keyPrefix = name + ".";
       Properties merged = new Properties();
-      merged.putAll(all);
+      // shared settings only: another instance's settings (and their variables) don't apply here
+      for (String key : all.stringPropertyNames()) {
+        if (names.stream().noneMatch(n -> key.startsWith(n + "."))) {
+          merged.setProperty(key, all.getProperty(key));
+        }
+      }
       merged.setProperty(PREFIX, name);
       for (String key : all.stringPropertyNames()) {
         if (key.startsWith(keyPrefix)) {
           merged.setProperty(key.substring(keyPrefix.length()), all.getProperty(key));
         }
       }
-      result.add(new Config(merged));
+      result.add(new Config(merged, env));
     }
     return result;
   }
 
+  private String expandVariables(String key, String value, Map<String, String> env) {
+    Matcher m = VARIABLE.matcher(value);
+    StringBuilder expanded = new StringBuilder();
+    while (m.find()) {
+      String replacement;
+      if (m.group(1) != null) {
+        replacement = "${" + m.group(2) + "}";
+      } else {
+        replacement = env.get(m.group(2));
+        if (replacement == null) {
+          this.variableErrors.add("The '" + key + "' option uses the environment variable '"
+              + m.group(2) + "', which is not set");
+          replacement = "";
+        }
+      }
+      m.appendReplacement(expanded, Matcher.quoteReplacement(replacement));
+    }
+    m.appendTail(expanded);
+    return expanded.toString();
+  }
+
   public boolean validate(PrintStream errors) {
     boolean result = true;
+    for (String error : this.variableErrors) {
+      errors.println(error);
+      result = false;
+    }
     if (isNullOrEmpty(getPrefix())) {
       errors.println("The '" + PREFIX + "' option is missing");
       result = false;
