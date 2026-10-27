@@ -23,16 +23,19 @@ public class CsvUtils {
   }
 
   public static String resultSetToCsv(ResultSet rs, String[][] columns, RowFilter filter) throws SQLException {
-    CsvWriter csv = new CsvWriter();
-    ResultSetMetaData meta = rs.getMetaData();
-    writeMeta(csv, meta, columns);
-    while (rs.next()) {
-      if (filter == null || filter.include(rs)) {
-        writeRow(csv, meta, columns, rs);
+    try {
+      CsvWriter csv = new CsvWriter();
+      ResultSetMetaData meta = rs.getMetaData();
+      writeMeta(csv, meta, columns);
+      while (rs.next()) {
+        if (filter == null || filter.include(rs)) {
+          writeRow(csv, meta, columns, rs);
+        }
       }
+      return csv.end();
+    } finally {
+      rs.close();
     }
-    rs.close();
-    return csv.end();
   }
 
   /** Writes at most maxRows rows (0 means no limit) and reports whether more were available. */

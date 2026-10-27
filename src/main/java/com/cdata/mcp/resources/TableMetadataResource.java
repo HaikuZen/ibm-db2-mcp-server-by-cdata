@@ -3,7 +3,6 @@ package com.cdata.mcp.resources;
 import com.cdata.mcp.*;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.sql.Connection;

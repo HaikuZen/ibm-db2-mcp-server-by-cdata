@@ -80,8 +80,6 @@ public class Program {
       System.err.println("Usage: <properties-file-path>");
       System.exit(-1);
     }
-    String path = args[0];
-
     final Program p = new Program();
     p.init(args[0]);
     p.configureMcp();

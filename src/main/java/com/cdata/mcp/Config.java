@@ -12,7 +12,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import static com.cdata.mcp.StringUtil.isNullOrEmpty;
@@ -37,14 +39,15 @@ public class Config {
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
 
-  // following properties will be discovered dynamically from driver
-  private static final String ID_QUOTE_OPEN_CHAR = "IDENTIFIER_QUOTE_OPEN_CHAR";
-  private static final String ID_QUOTE_CLOSE_CHAR = "IDENTIFIER_QUOTE_CLOSE_CHAR";
-  private static final String SUPPORTS_MULTIPLE_CATALOGS = "SUPPORTS_MULTIPLE_CATALOGS";
-  private static final String SUPPORTS_MULTIPLE_SCHEMAS = "SUPPORTS_MULTIPLE_SCHEMAS";
+  // instances using the same JARs and driver class share one loaded driver
+  private static final Map<List<String>, Driver> DRIVERS = new HashMap<>();
+
   private Properties props = new Properties();
-  private Properties sqlInfo = new Properties();
   private Driver driver;
+  // discovered from the driver's metadata
+  private String identifierQuote;
+  private boolean multipleCatalogs;
+  private boolean multipleSchemas;
   private ConnectionPool pool;
   private String defCatalog;
   private String defSchema;
@@ -174,16 +177,13 @@ public class Config {
     return completeTableList(entries);
   }
   public String getIdentifierQuotes() {
-    return this.sqlInfo.getProperty(ID_QUOTE_OPEN_CHAR)
-        + this.sqlInfo.getProperty(ID_QUOTE_CLOSE_CHAR);
+    return this.identifierQuote + this.identifierQuote;
   }
   public boolean supportsMultipleCatalogs() {
-    String val = this.sqlInfo.getProperty(SUPPORTS_MULTIPLE_CATALOGS);
-    return val.equalsIgnoreCase("YES");
+    return this.multipleCatalogs;
   }
   public boolean supportsMultipleSchemas() {
-    String val = this.sqlInfo.getProperty(SUPPORTS_MULTIPLE_SCHEMAS);
-    return val.equalsIgnoreCase("YES");
+    return this.multipleSchemas;
   }
   public String defaultCatalog() {
     return this.defCatalog;
@@ -229,13 +229,6 @@ public class Config {
     }
     errors.println("The '" + key + "' option must be a whole number of 0 or more");
     return false;
-  }
-
-  public String quoteIdentifier(String id) {
-    String open = this.sqlInfo.getProperty(ID_QUOTE_OPEN_CHAR);
-    String close = this.sqlInfo.getProperty(ID_QUOTE_CLOSE_CHAR);
-    // TODO: Properly escape things
-    return open + id + close;
   }
 
   public Connection newConnection() throws SQLException {
@@ -293,21 +286,33 @@ public class Config {
   }
 
   private void loadDriver() throws Exception {
-    // db2jcc4 looks for the db2jcc_license_*.jar on its own class path
-    List<URL> jars = new ArrayList<>();
-    jars.add(new File(this.getDriverJar()).toURI().toURL());
-    if (!isNullOrEmpty(this.getLicenseJar())) {
-      jars.add(new File(this.getLicenseJar()).toURI().toURL());
-    }
-    URLClassLoader ucl = new URLClassLoader(
-        jars.toArray(new URL[0]),
-        this.getClass().getClassLoader()
-    );
-    Class dc = ucl.loadClass(this.getDriver());
-    this.driver = (Driver)dc.getDeclaredConstructor().newInstance();
+    this.driver = loadSharedDriver(this.getDriverJar(), this.getLicenseJar(), this.getDriver());
     this.pool = new ConnectionPool(this::openConnection, getPoolSize());
 
     loadSqlInfo();
+  }
+
+  private static synchronized Driver loadSharedDriver(String driverJar, String licenseJar, String driverClass)
+      throws Exception {
+    String license = isNullOrEmpty(licenseJar) ? "" : new File(licenseJar).getCanonicalPath();
+    List<String> key = List.of(new File(driverJar).getCanonicalPath(), license, driverClass);
+    Driver driver = DRIVERS.get(key);
+    if (driver == null) {
+      // db2jcc4 looks for the db2jcc_license_*.jar on its own class path
+      List<URL> jars = new ArrayList<>();
+      jars.add(new File(driverJar).toURI().toURL());
+      if (!license.isEmpty()) {
+        jars.add(new File(license).toURI().toURL());
+      }
+      URLClassLoader ucl = new URLClassLoader(
+          jars.toArray(new URL[0]),
+          Config.class.getClassLoader()
+      );
+      Class<?> dc = ucl.loadClass(driverClass);
+      driver = (Driver)dc.getDeclaredConstructor().newInstance();
+      DRIVERS.put(key, driver);
+    }
+    return driver;
   }
 
   private void loadSqlInfo() throws SQLException {
@@ -346,10 +351,9 @@ public class Config {
     if (quote == null || quote.isBlank()) {
       quote = "";
     }
-    this.sqlInfo.put(ID_QUOTE_OPEN_CHAR, quote);
-    this.sqlInfo.put(ID_QUOTE_CLOSE_CHAR, quote);
-    this.sqlInfo.put(SUPPORTS_MULTIPLE_CATALOGS, meta.supportsCatalogsInDataManipulation() ? "YES" : "NO");
-    this.sqlInfo.put(SUPPORTS_MULTIPLE_SCHEMAS, meta.supportsSchemasInDataManipulation() ? "YES" : "NO");
+    this.identifierQuote = quote;
+    this.multipleCatalogs = meta.supportsCatalogsInDataManipulation();
+    this.multipleSchemas = meta.supportsSchemasInDataManipulation();
   }
 
   private List<Table> completeTableList(List<Table> list) throws SQLException {

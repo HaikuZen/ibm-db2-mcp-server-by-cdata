@@ -26,6 +26,21 @@ public class CsvUtilsTests {
   }
 
   @Test
+  public void resultSetIsClosedWhenReadingFails() {
+    boolean[] closed = { false };
+    ResultSet rs = (ResultSet)Proxy.newProxyInstance(
+        ResultSet.class.getClassLoader(), new Class[] { ResultSet.class },
+        (p, m, a) -> switch (m.getName()) {
+          case "getMetaData" -> throw new java.sql.SQLException("connection lost");
+          case "close" -> { closed[0] = true; yield null; }
+          default -> null;
+        });
+    Assert.assertThrows(java.sql.SQLException.class,
+        () -> CsvUtils.resultSetToCsv(rs, new String[][] { { "ID", "Id" } }));
+    Assert.assertTrue(closed[0]);
+  }
+
+  @Test
   public void underLimit() throws Exception {
     CsvUtils.CsvResult result = CsvUtils.limitedResultSetToCsv(rows(2), 3);
     Assert.assertEquals("\"ID\"\n\"1\"\n\"2\"\n", result.csv());

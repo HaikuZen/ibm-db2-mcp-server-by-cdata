@@ -2,7 +2,6 @@ package com.cdata.mcp.tests;
 
 import com.cdata.mcp.JsonSchemaBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import org.junit.Assert;

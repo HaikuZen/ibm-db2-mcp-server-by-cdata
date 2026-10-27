@@ -219,15 +219,6 @@ public class Table {
         nextChar();
       }
     }
-    private void skipToDot() {
-      while (!eof()) {
-        char p = peek();
-        if (p == '.') {
-          break;
-        }
-        nextChar();
-      }
-    }
     private void skipListDelimiter() {
       while (!eof()) {
         char p = nextChar();
