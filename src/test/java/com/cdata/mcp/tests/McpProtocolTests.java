@@ -29,12 +29,14 @@ public class McpProtocolTests {
   private McpSyncServer server;
   private OutputStream toServer;
   private BufferedReader fromServer;
+  private String instructions;
 
   @Before
   public void start() throws Exception {
     File f = File.createTempFile("config", ".prp");
     f.deleteOnExit();
-    Files.writeString(f.toPath(), "Instances=prod,test\nServerName=DB2\nServerVersion=1.0\nprod.DefaultSchema=SALES\n");
+    Files.writeString(f.toPath(), "Instances=prod,test\nServerName=DB2\nServerVersion=1.0\nprod.DefaultSchema=SALES\n"
+        + "prod.JdbcUrl=jdbc:db2://prod-host:50001/SALESDB:user=admin;password=secret;\nMaxRows=500\n");
     List<Config> configs = Config.loadAll(f.getPath());
 
     PipedInputStream serverIn = new PipedInputStream(1 << 16);
@@ -47,8 +49,10 @@ public class McpProtocolTests {
         "protocolVersion", "2025-06-18",
         "capabilities", Map.of(),
         "clientInfo", Map.of("name", "test", "version", "1.0")));
-    Map<String, Object> serverInfo = (Map<String, Object>)((Map<String, Object>)init.get("result")).get("serverInfo");
+    Map<String, Object> initResult = (Map<String, Object>)init.get("result");
+    Map<String, Object> serverInfo = (Map<String, Object>)initResult.get("serverInfo");
     Assert.assertEquals("DB2", serverInfo.get("name"));
+    this.instructions = (String)initResult.get("instructions");
     send(Map.of("jsonrpc", "2.0", "method", "notifications/initialized"));
   }
 
@@ -63,6 +67,7 @@ public class McpProtocolTests {
     List<Map<String, Object>> tools = (List<Map<String, Object>>)result.get("tools");
     List<String> names = tools.stream().map(t -> (String)t.get("name")).sorted().collect(Collectors.toList());
     Assert.assertEquals(List.of(
+        "help", "list_instances",
         "prod_get_columns", "prod_get_tables", "prod_run_query",
         "test_get_columns", "test_get_tables", "test_run_query"), names);
 
@@ -86,6 +91,37 @@ public class McpProtocolTests {
     Assert.assertTrue(descriptions.get("prod_run_query").contains("Unqualified table names refer to the `SALES` schema"));
     Assert.assertFalse(descriptions.get("test_get_tables").contains("SALES"));
     Assert.assertTrue(descriptions.get("test_run_query").contains("Qualify tables with their schema"));
+  }
+
+  @Test(timeout = 20000)
+  public void listInstances() throws Exception {
+    String csv = callText(5, "list_instances");
+    List<String> lines = csv.lines().collect(Collectors.toList());
+    Assert.assertEquals(
+        "\"Instance\",\"Platform\",\"Product\",\"Version\",\"Host\",\"Port\",\"Database\",\"DefaultSchema\",\"MaxRows\",\"QueryTimeout\"",
+        lines.get(0));
+    Assert.assertEquals("\"prod\",,,,\"prod-host\",\"50001\",\"SALESDB\",\"SALES\",\"500\",\"60\"", lines.get(1));
+    Assert.assertEquals("\"test\",,,,,,,,\"500\",\"60\"", lines.get(2));
+    // URL properties can hold credentials and must never be listed
+    Assert.assertFalse(csv.contains("secret"));
+    Assert.assertFalse(csv.contains("admin"));
+  }
+
+  @Test(timeout = 20000)
+  public void helpDescribesInstancesAndIsSentAsInstructions() throws Exception {
+    String help = callText(6, "help");
+    Assert.assertTrue(help.contains("- `prod` (database SALESDB on prod-host, default schema SALES, at most 500 rows per query, 60 s query timeout): "
+        + "tools `prod_get_tables`, `prod_get_columns`, `prod_run_query`"));
+    Assert.assertTrue(help.contains("`test_run_query`"));
+    Assert.assertTrue(help.contains("FETCH FIRST n ROWS ONLY"));
+    Assert.assertFalse(help.contains("secret"));
+    Assert.assertEquals(help, this.instructions);
+  }
+
+  private String callText(int id, String tool) throws Exception {
+    Map<String, Object> result = (Map<String, Object>)request(id, "tools/call", Map.of("name", tool, "arguments", Map.of())).get("result");
+    Assert.assertNotEquals(Boolean.TRUE, result.get("isError"));
+    return (String)((List<Map<String, Object>>)result.get("content")).get(0).get("text");
   }
 
   @Test(timeout = 20000)

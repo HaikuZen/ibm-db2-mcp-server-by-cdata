@@ -149,6 +149,31 @@ public class ConfigTests {
   }
 
   @Test
+  public void addressFromJdbcUrl() throws Exception {
+    Config config = load("Prefix=db2\nJdbcUrl=jdbc:db2://db.example.com:446/LOCDB01:sslConnection=true;password=x;\n").get(0);
+    Assert.assertEquals("db.example.com", config.getHost());
+    Assert.assertEquals("446", config.getPort());
+    Assert.assertEquals("LOCDB01", config.getDatabase());
+
+    Config noPort = load("Prefix=db2\nJdbcUrl=jdbc:db2://localhost/SAMPLE\n").get(0);
+    Assert.assertEquals("localhost", noPort.getHost());
+    Assert.assertEquals("", noPort.getPort());
+    Assert.assertEquals("SAMPLE", noPort.getDatabase());
+
+    Assert.assertEquals("", load("Prefix=db2\nJdbcUrl=jdbc:other:x\n").get(0).getHost());
+    Assert.assertEquals("", load("Prefix=db2\n").get(0).getDatabase());
+  }
+
+  @Test
+  public void platformFromProductVersion() {
+    Assert.assertEquals("z/OS", Config.platformOf("DSN12015"));
+    Assert.assertEquals("LUW", Config.platformOf("SQL11058"));
+    Assert.assertEquals("IBM i", Config.platformOf("QSQ07050"));
+    Assert.assertEquals("", Config.platformOf("XYZ"));
+    Assert.assertEquals("", Config.platformOf(null));
+  }
+
+  @Test
   public void topLevelPrefixIsNotShared() throws Exception {
     List<Config> configs = load("Instances=a,b\nPrefix=db2\n");
     Assert.assertEquals("a", configs.get(0).getPrefix());

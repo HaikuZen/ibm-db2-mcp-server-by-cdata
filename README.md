@@ -146,6 +146,10 @@ In the definitions below, `{servername}` refers to the name of the MCP Server in
 * `{servername}_get_columns` - Retrieves a list of columns for a table. Use the `{servername}_get_tables` tool to get a list of available tables. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_run_query` - Execute a SQL SELECT query
 
+The server also has two tools that cover all instances:
+* `list_instances` - Lists the configured DB2 instances: tool prefix, platform (z/OS, LUW or IBM i), product version, host, port, database, default schema and limits. Credentials and JDBC URL properties are never included.
+* `help` - Returns instructions for the AI client: each instance's tools, the recommended workflow, the read-only rules and limits, and DB2 SQL tips for the platforms in use. The same text is sent as the server's MCP `instructions` when a client connects.
+
 ## JSON-RPC Request Examples
 If you are scripting out the requests sent to the MCP Server instead of using an AI Client (e.g. Claude), then you can refer to the JSON payload examples below – following the JSON-RPC 2.0 specification - when calling the available tools. 
 

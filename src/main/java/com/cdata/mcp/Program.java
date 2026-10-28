@@ -8,6 +8,8 @@ import java.util.Set;
 import com.cdata.mcp.resources.TableMetadataResource;
 import com.cdata.mcp.tools.GetColumnsTool;
 import com.cdata.mcp.tools.GetTablesTool;
+import com.cdata.mcp.tools.HelpTool;
+import com.cdata.mcp.tools.ListInstancesTool;
 import com.cdata.mcp.tools.RunQueryTool;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -63,6 +65,7 @@ public class Program {
     McpServer.SyncSpecification<?> spec =
         McpServer.sync(transport)
             .serverInfo(configs.get(0).getServerName(), configs.get(0).getServerVersion())
+            .instructions(HelpTool.instructions(configs))
             .capabilities(
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
@@ -75,6 +78,9 @@ public class Program {
       registerResources(config, spec);
       registerTools(config, spec);
     }
+    // these cover the whole server, so they are registered once rather than per instance
+    new ListInstancesTool(configs).register(spec);
+    new HelpTool(configs).register(spec);
 
     return spec.build();
   }

@@ -43,6 +43,8 @@ public class Config {
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
 
   // ${NAME} reads an environment variable; $${NAME} is a literal ${NAME}
+  // jdbc:db2://host[:port]/database[:properties]
+  private static final Pattern DB2_URL = Pattern.compile("^jdbc:db2://([^:/]+)(?::(\\d+))?/([^:;/]+)", Pattern.CASE_INSENSITIVE);
   private static final Pattern VARIABLE = Pattern.compile("\\$(\\$)?\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
 
   // instances using the same JARs and driver class share one loaded driver
@@ -55,6 +57,8 @@ public class Config {
   private String identifierQuote;
   private boolean multipleCatalogs;
   private boolean multipleSchemas;
+  private String productName;
+  private String productVersion;
   private ConnectionPool pool;
   private String defCatalog;
   private String defSchema;
@@ -234,6 +238,56 @@ public class Config {
   public String defaultCatalog() {
     return this.defCatalog;
   }
+  /** As reported by the server, e.g. "DB2"; null until the driver is loaded. */
+  public String getDatabaseProductName() {
+    return this.productName;
+  }
+
+  /** As reported by the server, e.g. "DSN12015"; null until the driver is loaded. */
+  public String getDatabaseProductVersion() {
+    return this.productVersion;
+  }
+
+  public String getPlatform() {
+    return platformOf(this.productVersion);
+  }
+
+  /** DB2 product versions start with DSN (z/OS), SQL (Linux, UNIX and Windows) or QSQ (IBM i). */
+  public static String platformOf(String productVersion) {
+    if (productVersion == null) {
+      return "";
+    }
+    String v = productVersion.toUpperCase();
+    if (v.startsWith("DSN")) {
+      return "z/OS";
+    } else if (v.startsWith("SQL")) {
+      return "LUW";
+    } else if (v.startsWith("QSQ")) {
+      return "IBM i";
+    }
+    return "";
+  }
+
+  /** Host, port and database from the JdbcUrl, never its properties (which may hold credentials). */
+  public String getHost() {
+    return urlPart(1);
+  }
+  public String getPort() {
+    return urlPart(2);
+  }
+  public String getDatabase() {
+    return urlPart(3);
+  }
+
+  private String urlPart(int group) {
+    String url = getJdbcUrl();
+    if (url == null) {
+      return "";
+    }
+    Matcher m = DB2_URL.matcher(url.trim());
+    return m.find() && m.group(group) != null ? m.group(group) : "";
+  }
+
   /** The configured DefaultSchema, or the one discovered for drivers without schema support. */
   public String defaultSchema() {
     String configured = this.props.getProperty(DEFAULT_SCHEMA);
@@ -411,6 +465,8 @@ public class Config {
     this.identifierQuote = quote;
     this.multipleCatalogs = meta.supportsCatalogsInDataManipulation();
     this.multipleSchemas = meta.supportsSchemasInDataManipulation();
+    this.productName = meta.getDatabaseProductName();
+    this.productVersion = meta.getDatabaseProductVersion();
   }
 
   private List<Table> completeTableList(List<Table> list) throws SQLException {
