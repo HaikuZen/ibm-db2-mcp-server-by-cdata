@@ -15,6 +15,21 @@ ServerVersion=1.0
 # Uncomment to write debug logs to a file (stdout is reserved for MCP traffic)
 #LogFile=/PATH/TO/db2-mcp.log
 
+# --- Transport ------------------------------------------------------------
+# stdio (default): the MCP client starts the server and talks over stdin/stdout.
+# http: the server runs on its own and clients connect to http://HttpHost:HttpPort/HttpPath.
+# These apply to the whole server: don't prefix them with an instance name.
+#Transport=http
+# 127.0.0.1 (default) accepts connections from this machine only. A network address such as
+# 0.0.0.0 requires HttpToken; traffic is not encrypted, so use an SSH tunnel or HTTPS proxy.
+#HttpHost=127.0.0.1
+#HttpPort=8080
+#HttpPath=/mcp
+# Clients must send "Authorization: Bearer <token>" (optional on 127.0.0.1)
+#HttpToken=${DB2_MCP_TOKEN}
+# Origins of web pages allowed to call the server (default: localhost on any port)
+#HttpAllowedOrigins=http://localhost:*, http://127.0.0.1:*
+
 # --- Driver (shared) ------------------------------------------------------
 # IBM Data Server Driver for JDBC and SQLJ
 DriverPath=/PATH/TO/db2jcc4.jar

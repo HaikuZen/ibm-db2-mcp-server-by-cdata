@@ -4,6 +4,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,16 +22,22 @@ import com.cdata.mcp.tools.TableStatsTool;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import org.eclipse.jetty.ee11.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee11.servlet.ServletHolder;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
 
 public class Program {
   
   private McpServerTransportProvider transport;
+  private HttpServletStreamableServerTransportProvider httpTransport;
+  private Server httpServer;
   private List<Config> configs;
   private McpSyncServer mcpServer;
-  private static final boolean STDIO = true;
 
   public void init(String configPath) throws Exception {
     this.configs = Config.loadAll(configPath);
@@ -43,7 +50,8 @@ public class Program {
       System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
       System.setProperty("org.slf4j.simpleLogger.logFile", first.getLogFile());
     }
-    boolean valid = true;
+    // the transport settings are shared, so the first instance has them
+    boolean valid = first.validateTransport(System.err);
     Set<String> prefixes = new HashSet<>();
     Set<String> schemes = new HashSet<>();
     for (Config config : this.configs) {
@@ -60,28 +68,44 @@ public class Program {
       System.exit(-1);
     }
 
-    this.transport = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), exitOnEndOfInput(System.in), System.out);
+    if (first.isHttp()) {
+      this.httpTransport = HttpServletStreamableServerTransportProvider.builder()
+          .jsonMapper(McpJsonDefaults.getMapper())
+          .mcpEndpoint(first.getHttpPath())
+          .httpHeaderValidator(new HttpAccessValidator(first.getHttpAllowedOrigins(), first.getHttpToken()))
+          .build();
+    } else {
+      this.transport = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), exitOnEndOfInput(System.in), System.out);
+    }
   }
 
   public void configureMcp() throws Exception {
-    this.mcpServer = createServer(this.transport, this.configs);
+    if (this.httpTransport != null) {
+      this.mcpServer = createServer(McpServer.sync(this.httpTransport), this.configs);
+      this.httpServer = startHttpServer(this.configs, this.httpTransport);
+    } else {
+      this.mcpServer = createServer(this.transport, this.configs);
+    }
   }
 
   /** Builds the server exposing the tools and resources of every configured instance. */
   public static McpSyncServer createServer(McpServerTransportProvider transport, List<Config> configs) throws Exception {
-    McpServer.SyncSpecification<?> spec =
-        McpServer.sync(transport)
-            .serverInfo(configs.get(0).getServerName(), configs.get(0).getServerVersion())
-            .instructions(HelpTool.instructions(configs))
-            .capabilities(
-                McpSchema.ServerCapabilities.builder()
-                    .tools(true)
-                    .resources(false, true)
-                    // no prompts, but some clients ask for them regardless; answer with an empty list
-                    .prompts(false)
-                    //.logging()
-                    .build()
-            );
+    return createServer(McpServer.sync(transport), configs);
+  }
+
+  /** Like {@link #createServer(McpServerTransportProvider, List)}, for any transport's specification. */
+  public static McpSyncServer createServer(McpServer.SyncSpecification<?> spec, List<Config> configs) throws Exception {
+    spec.serverInfo(configs.get(0).getServerName(), configs.get(0).getServerVersion())
+        .instructions(HelpTool.instructions(configs))
+        .capabilities(
+            McpSchema.ServerCapabilities.builder()
+                .tools(true)
+                .resources(false, true)
+                // no prompts, but some clients ask for them regardless; answer with an empty list
+                .prompts(false)
+                //.logging()
+                .build()
+        );
 
     for (Config config : configs) {
       registerResources(config, spec);
@@ -102,21 +126,24 @@ public class Program {
     final Program p = new Program();
     p.init(args[0]);
     p.configureMcp();
-    if (!STDIO) {
-      //p.runHttpServer();
-    } else {
-      // runs on SIGTERM and on the System.exit() made when the client closes stdin
-      Runtime.getRuntime().addShutdownHook(new Thread(p::shutdown));
-      synchronized (p) {
-        while (true) {
-          p.wait();
-        }
+    // runs on SIGTERM, Ctrl+C and, with stdio, on the System.exit() made when the client closes stdin
+    Runtime.getRuntime().addShutdownHook(new Thread(p::shutdown));
+    synchronized (p) {
+      while (true) {
+        p.wait();
       }
     }
   }
 
   private void shutdown() {
     this.mcpServer.closeGracefully();
+    if (this.httpServer != null) {
+      try {
+        this.httpServer.stop();
+      } catch (Exception ex) {
+        System.err.println("Stopping the HTTP server failed: " + ex.getMessage());
+      }
+    }
     for (Config config : this.configs) {
       config.close();
     }
@@ -149,6 +176,43 @@ public class Program {
         return result;
       }
     };
+  }
+
+  /** Serves the MCP endpoint (Streamable HTTP) on HttpHost:HttpPort. */
+  private static Server startHttpServer(List<Config> configs, HttpServletStreamableServerTransportProvider transport)
+      throws Exception {
+    Config first = configs.get(0);
+    Server server = new Server();
+    ServerConnector connector = new ServerConnector(server);
+    connector.setHost(first.getHttpHost());
+    connector.setPort(first.getHttpPort());
+    // a tool call's response stays silent while its query runs, so don't drop it before the query timeout
+    connector.setIdleTimeout(idleTimeout(configs).toMillis());
+    server.addConnector(connector);
+
+    ServletContextHandler context = new ServletContextHandler();
+    context.setContextPath("/");
+    ServletHolder holder = new ServletHolder(transport);
+    holder.setAsyncSupported(true);
+    context.addServlet(holder, first.getHttpPath());
+    server.setHandler(context);
+    server.start();
+
+    String host = first.getHttpHost();
+    System.err.println("MCP server listening on http://" + (host.contains(":") ? "[" + host + "]" : host)
+        + ":" + connector.getLocalPort() + first.getHttpPath());
+    return server;
+  }
+
+  private static Duration idleTimeout(List<Config> configs) {
+    int longest = 0;
+    for (Config config : configs) {
+      if (config.getQueryTimeout() == 0) {
+        return Duration.ZERO; // queries without a timeout: never close an idle connection
+      }
+      longest = Math.max(longest, config.getQueryTimeout());
+    }
+    return Duration.ofSeconds(longest + 60);
   }
 
   private static void registerResources(Config config, McpServer.SyncSpecification<?> mcp) throws SQLException {

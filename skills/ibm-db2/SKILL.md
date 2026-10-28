@@ -1,6 +1,6 @@
 ---
 name: ibm-db2
-description: How to explore and query IBM DB2 databases (DB2 for z/OS, DB2 for Linux/UNIX/Windows, DB2 for IBM i) through the read-only IBM DB2 MCP server, whose tools are list_instances, help, and per-instance tools ending in _list_schemas, _get_tables, _table_stats, _get_columns, _describe_table, _search_columns and _run_query (e.g. prod_run_query). Use this skill whenever those tools are available and the user asks anything about data that may live in DB2 - counts, reports, trends, lookups, "which tables have...", "how big is...", comparing prod and test - or mentions DB2, Db2, the mainframe, z/OS, AS/400, iSeries, IBM i, a DB2 schema or table name, SQLCODE/SQLSTATE errors, or wants SQL written for DB2, even if they never say "DB2" or "MCP". Also use it when the DB2 MCP server seems missing or not connected, or the user is configuring or testing it (it is a stdio-only server, not HTTP).
+description: How to explore and query IBM DB2 databases (DB2 for z/OS, DB2 for Linux/UNIX/Windows, DB2 for IBM i) through the read-only IBM DB2 MCP server, whose tools are list_instances, help, and per-instance tools ending in _list_schemas, _get_tables, _table_stats, _get_columns, _describe_table, _search_columns and _run_query (e.g. prod_run_query). Use this skill whenever those tools are available and the user asks anything about data that may live in DB2 - counts, reports, trends, lookups, "which tables have...", "how big is...", comparing prod and test - or mentions DB2, Db2, the mainframe, z/OS, AS/400, iSeries, IBM i, a DB2 schema or table name, SQLCODE/SQLSTATE errors, or wants SQL written for DB2, even if they never say "DB2" or "MCP". Also use it when the DB2 MCP server seems missing or not connected, or the user is configuring or testing it (over stdio or HTTP).
 ---
 
 # Querying IBM DB2 through the MCP server
@@ -23,21 +23,21 @@ Results are CSV with a header line. Extra text items after the CSV are notes fro
 
 ## 0. How the server is connected
 
-The server uses the MCP **stdio** transport only: the MCP client starts it as a local process (`command` and `args` in the client's MCP configuration, typically `java -jar CDataMCP-jar-with-dependencies.jar /path/to/file.prp`) and exchanges JSON-RPC messages over its stdin and stdout. It has no HTTP endpoint and listens on no port, so:
+The `Transport` setting in the server's `.prp` file chooses one of two ways:
 
-- It cannot be reached with `curl`, a browser, or a `url` / `serverUrl` entry in the client configuration.
-- A copy started by hand in a terminal is not the one the client uses; the client always starts its own.
-- Closing its stdin stops it; that is normal at the end of a session.
+- **stdio** (the default): the MCP client starts the server itself (`command` and `args` in the client's MCP configuration, typically `java -jar CDataMCP-jar-with-dependencies.jar /path/to/file.prp`) and exchanges JSON-RPC messages over its stdin and stdout. There is no port or URL, so `curl` or a `url` / `serverUrl` entry cannot reach it, and a copy started by hand in a terminal is not the one the client uses. Closing its stdin stops it; that is normal at the end of a session.
+- **http** (`Transport=http`): the server is started separately and keeps running; clients connect to its URL, `http://HttpHost:HttpPort/HttpPath` (default `http://127.0.0.1:8080/mcp`, MCP Streamable HTTP), with a `url` / `serverUrl` entry. If `HttpToken` is set, the client must send `Authorization: Bearer <token>`. The server prints its URL on stderr when it starts.
 
-If none of the tools above (`list_instances`, `help`, `*_run_query`, ...) are available to you, the server is not running for this client; usually it exited at startup because of a configuration error. Do not pretend to query DB2, and do not try to reach it another way. Tell the user, and point them at the usual causes:
+If none of the tools above (`list_instances`, `help`, `*_run_query`, ...) are available to you, the client is not connected to the server; usually it exited at startup because of a configuration error, or the client points at the wrong place. Do not pretend to query DB2, and do not try to reach it another way. Tell the user, and point them at the usual causes:
 
-- The client's MCP entry must use `command`/`args` (stdio), with absolute paths to `java`, the JAR and the `.prp` file.
-- Every `${NAME}` variable used in the `.prp` must be set in that entry's `env`: clients started from a desktop launcher do not inherit the user's shell variables.
+- The client entry must match the transport: `command`/`args` for stdio, the server's URL for http. A `command` entry for an http server starts a copy that never answers on stdin (and fails if another copy already has the port).
+- With stdio, use absolute paths to `java`, the JAR and the `.prp` file, and set every `${NAME}` variable used in the `.prp` in the entry's `env`: clients started from a desktop launcher do not inherit the user's shell variables.
+- With http, the server must be running; `401` means a missing or wrong token, `403` a browser page from an origin not in `HttpAllowedOrigins`.
 - `DriverPath`, `LicensePath` and `LogFile` in the `.prp` must be absolute paths.
 - Every instance listed in `Instances=` must be reachable: the server checks each connection at startup and exits if one fails, printing the reason on stderr (and in `LogFile`, if set).
-- After fixing the configuration, restart the server in the client and start a new conversation, so the tools are loaded.
+- After fixing the configuration, restart or reconnect the server in the client and start a new conversation, so the tools are loaded.
 
-To test the server outside the client, pipe the protocol messages into it, keeping stdin open long enough for the replies:
+To test a stdio server outside the client, pipe the protocol messages into it, keeping stdin open long enough for the replies:
 
 ```bash
 ( printf '%s\n' \
@@ -47,7 +47,15 @@ To test the server outside the client, pipe the protocol messages into it, keepi
   sleep 10 ) | java -jar /path/to/CDataMCP-jar-with-dependencies.jar /path/to/file.prp
 ```
 
-A working server prints one JSON line per request; a misconfigured one prints an error and exits.
+A working server prints one JSON line per request; a misconfigured one prints an error and exits. To test an http server, send the `initialize` request with `curl`:
+
+```bash
+curl -i http://127.0.0.1:8080/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Authorization: Bearer <token>' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}'
+```
+
+A working server answers `200` with an `Mcp-Session-Id` header.
 
 ## 1. Orient yourself first
 

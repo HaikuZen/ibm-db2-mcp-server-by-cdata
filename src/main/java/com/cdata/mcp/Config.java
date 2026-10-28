@@ -3,6 +3,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.sql.Connection;
@@ -14,6 +15,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -38,6 +40,13 @@ public class Config {
   private static final String POOL_SIZE = "PoolSize";
   private static final String DEFAULT_SCHEMA = "DefaultSchema";
   private static final String SYSTEM_SCHEMAS = "SystemSchemas";
+  // server-wide: read from the shared settings, like ServerName and LogFile
+  private static final String TRANSPORT = "Transport";
+  private static final String HTTP_HOST = "HttpHost";
+  private static final String HTTP_PORT = "HttpPort";
+  private static final String HTTP_PATH = "HttpPath";
+  private static final String HTTP_TOKEN = "HttpToken";
+  private static final String HTTP_ALLOWED_ORIGINS = "HttpAllowedOrigins";
   // IBM's own schemas; SYSIBM% covers SYSIBMADM, SYSIBMTS, ... User schemas such as SYSADM are not included.
   private static final String DEFAULT_SYSTEM_SCHEMAS =
       "SYSIBM%, SYSCAT, SYSFUN, SYSSTAT, SYSPROC, SYSPUBLIC, SYSTOOLS, SYSACCEL, NULLID, SQLJ";
@@ -45,6 +54,14 @@ public class Config {
   private static final int DEFAULT_MAX_ROWS = 1000;
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
   private static final String DEFAULT_DRIVER = "com.ibm.db2.jcc.DB2Driver";
+  public static final String STDIO = "stdio";
+  public static final String HTTP = "http";
+  private static final String DEFAULT_HTTP_HOST = "127.0.0.1";
+  private static final int DEFAULT_HTTP_PORT = 8080;
+  private static final String DEFAULT_HTTP_PATH = "/mcp";
+  // pages served from this machine; browsers send Origin, other clients usually don't
+  private static final String DEFAULT_HTTP_ALLOWED_ORIGINS =
+      "http://localhost:*, http://127.0.0.1:*, http://[::1]:*, https://localhost:*, https://127.0.0.1:*, https://[::1]:*";
 
   // ${NAME} reads an environment variable; $${NAME} is a literal ${NAME}
   // jdbc:db2://host[:port]/database[:properties]
@@ -339,6 +356,92 @@ public class Config {
 
   public String getLogFile() {
     return this.props.getProperty(LOG_FILE);
+  }
+
+  /** {@link #STDIO} (the client starts the server and talks over stdin/stdout) or {@link #HTTP}. */
+  public String getTransport() {
+    String value = this.props.getProperty(TRANSPORT);
+    return isNullOrEmpty(value) || value.isBlank() ? STDIO : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  public boolean isHttp() {
+    return HTTP.equals(getTransport());
+  }
+
+  /** Address the HTTP listener binds to; the default accepts connections from this machine only. */
+  public String getHttpHost() {
+    String value = this.props.getProperty(HTTP_HOST);
+    return isNullOrEmpty(value) || value.isBlank() ? DEFAULT_HTTP_HOST : value.trim();
+  }
+
+  public int getHttpPort() {
+    return getInt(HTTP_PORT, DEFAULT_HTTP_PORT);
+  }
+
+  /** The MCP endpoint, e.g. /mcp for http://host:port/mcp. */
+  public String getHttpPath() {
+    String value = this.props.getProperty(HTTP_PATH);
+    if (isNullOrEmpty(value) || value.isBlank()) {
+      return DEFAULT_HTTP_PATH;
+    }
+    value = value.trim();
+    return value.startsWith("/") ? value : "/" + value;
+  }
+
+  /** Token clients must send as "Authorization: Bearer ..."; null when none is required. */
+  public String getHttpToken() {
+    String value = this.props.getProperty(HTTP_TOKEN);
+    return isNullOrEmpty(value) || value.isBlank() ? null : value.trim();
+  }
+
+  /** Origins whose web pages may call the server; "scheme://host:*" matches any port. */
+  public List<String> getHttpAllowedOrigins() {
+    List<String> result = new ArrayList<>();
+    for (String origin : this.props.getProperty(HTTP_ALLOWED_ORIGINS, DEFAULT_HTTP_ALLOWED_ORIGINS).split(",")) {
+      if (!origin.isBlank()) {
+        result.add(origin.trim());
+      }
+    }
+    return result;
+  }
+
+  /** Checks the server-wide transport settings. */
+  public boolean validateTransport(PrintStream errors) {
+    String transport = getTransport();
+    if (!STDIO.equals(transport) && !HTTP.equals(transport)) {
+      errors.println("The '" + TRANSPORT + "' option must be '" + STDIO + "' or '" + HTTP + "'");
+      return false;
+    }
+    if (!isHttp()) {
+      return true;
+    }
+    if (!verifyNonNegativeInt(HTTP_PORT, errors)) {
+      return false;
+    }
+    if (getHttpPort() < 1 || getHttpPort() > 65535) {
+      errors.println("The '" + HTTP_PORT + "' option must be a port number between 1 and 65535");
+      return false;
+    }
+    if (getHttpPath().chars().anyMatch(c -> c <= ' ' || c == '?' || c == '#' || c == '*')) {
+      errors.println("The '" + HTTP_PATH + "' option must be a plain path such as /mcp");
+      return false;
+    }
+    if (getHttpToken() == null && !isLoopback(getHttpHost())) {
+      // anyone who can reach the port could query the databases with this server's DB2 account
+      errors.println("The '" + HTTP_HOST + "' option accepts connections from other machines,"
+          + " so the '" + HTTP_TOKEN + "' option is required");
+      return false;
+    }
+    return true;
+  }
+
+  /** True when the address only accepts connections from this machine (localhost, 127.0.0.1, ::1). */
+  public static boolean isLoopback(String host) {
+    try {
+      return InetAddress.getByName(host).isLoopbackAddress();
+    } catch (IOException ex) {
+      return false;
+    }
   }
 
   /** Maximum rows returned by a query; 0 means no limit. */

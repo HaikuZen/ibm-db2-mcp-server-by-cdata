@@ -36,6 +36,7 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
     * **MaxRows** - (optional) the maximum number of rows a query returns, defaults to `1000`; `0` means no limit
     * **QueryTimeout** - (optional) the query timeout in seconds, defaults to `60`; `0` means no timeout
     * **PoolSize** - (optional) the number of idle connections kept open for reuse, defaults to `4`; `0` opens a new connection for every request
+    * **Transport** - (optional) `stdio` (the default): the MCP client starts the server and talks to it over stdin/stdout; or `http`: the server runs on its own and listens for MCP clients over HTTP (Streamable HTTP). See [Running the Server over HTTP](#running-the-server-over-http) for the `Http*` settings
     * **Tables** - leave blank to access all data, otherwise you can explicitly declare the tables you wish to create access for (e.g. `MYSCHEMA.EMPLOYEE, MYSCHEMA.DEPARTMENT`). DB2 stores unquoted names in upper case.
       ```env
       Prefix=db2
@@ -133,7 +134,37 @@ This server wraps that driver and makes IBM DB2 data available through a simple 
 1. Run the follow the command to run the MCP Server on its own
       ```bash
       java -jar /PATH/TO/CDataMCP-jar-with-dependencies.jar /PATH/TO/ibm-db2.prp
-> **Note:** The server uses `stdio` so can only be used with clients that run on the same machine as the server.
+> **Note:** By default the server uses `stdio`: the client starts its own copy, so a copy started by hand is only useful for checking that the configuration works. To run the server on its own and let clients connect to it, use HTTP.
+
+## Running the Server over HTTP
+With `Transport=http` the server starts an HTTP listener instead of reading stdin, and clients connect to its URL (MCP Streamable HTTP). One running server can serve several clients at once. These settings apply to the whole server, so write them without an instance prefix:
+
+* **HttpHost** - (optional) the address to listen on, defaults to `127.0.0.1` (connections from this machine only). Use `0.0.0.0` to accept connections from other machines; then **HttpToken** is required
+* **HttpPort** - (optional) the port, defaults to `8080`
+* **HttpPath** - (optional) the MCP endpoint path, defaults to `/mcp`
+* **HttpToken** - (optional on `127.0.0.1`) a secret that clients must send as `Authorization: Bearer <token>`; requests without it are rejected with `401`. Use an environment variable, e.g. `HttpToken=${DB2_MCP_TOKEN}`
+* **HttpAllowedOrigins** - (optional) comma-separated origins whose web pages may call the server; `scheme://host:*` matches any port. Defaults to `localhost`, `127.0.0.1` and `[::1]` on any port, over `http` and `https`. Browsers send an `Origin` header and requests from other origins are rejected with `403`, so a web page cannot use your browser to reach the server. Most other clients send no `Origin` and are not affected
+
+```env
+Transport=http
+HttpPort=8080
+HttpToken=${DB2_MCP_TOKEN}
+```
+
+Start the server and leave it running:
+```bash
+DB2_MCP_TOKEN=change-me java -jar /PATH/TO/CDataMCP-jar-with-dependencies.jar /PATH/TO/ibm-db2.prp
+```
+It prints `MCP server listening on http://127.0.0.1:8080/mcp` on stderr. Then point the client at that URL, for example in Antigravity's `mcp_config.json`:
+```json
+"ibm-db2": {
+  "serverUrl": "http://127.0.0.1:8080/mcp",
+  "headers": { "Authorization": "Bearer change-me" }
+}
+```
+or in Claude Code: `claude mcp add --transport http ibm-db2 http://127.0.0.1:8080/mcp --header "Authorization: Bearer change-me"`.
+
+> **Warning:** The listener uses plain `http://`, so nothing it sends is encrypted. On `127.0.0.1` the traffic never leaves the machine. If other machines connect, anyone who can see the network traffic can read the token and the query results, and reuse the token to run their own queries. Before setting `HttpHost` to a network address, put an encrypted layer in front of the server, such as an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 db2-mcp-host`, keeping `HttpHost=127.0.0.1`) or an HTTPS reverse proxy. Every client that connects queries DB2 with the account in the `.prp` file, so use one that can only read.
 ## Usage Details
 Once the MCP Server is configured, the AI client will be able to use the built-in tools to read the underlying data. In general, you do not need to call the tools explicitly. Simply ask the client to answer questions about the underlying data system. For example:
 * "What is the correlation between my closed won opportunities and the account industry?"

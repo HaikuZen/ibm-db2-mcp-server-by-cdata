@@ -222,4 +222,61 @@ public class ConfigTests {
     Assert.assertEquals("a", configs.get(0).getPrefix());
     Assert.assertEquals("b", configs.get(1).getPrefix());
   }
+  private static String transportErrors(Config config) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    config.validateTransport(new PrintStream(out));
+    return out.toString();
+  }
+
+  @Test
+  public void stdioIsTheDefaultTransport() throws Exception {
+    Config config = load("Prefix=db2\n").get(0);
+    Assert.assertEquals(Config.STDIO, config.getTransport());
+    Assert.assertFalse(config.isHttp());
+    Assert.assertEquals("", transportErrors(config));
+  }
+
+  @Test
+  public void httpDefaults() throws Exception {
+    Config config = load("Prefix=db2\nTransport=HTTP\n").get(0);
+    Assert.assertTrue(config.isHttp());
+    Assert.assertEquals("127.0.0.1", config.getHttpHost());
+    Assert.assertEquals(8080, config.getHttpPort());
+    Assert.assertEquals("/mcp", config.getHttpPath());
+    Assert.assertNull(config.getHttpToken());
+    Assert.assertTrue(config.getHttpAllowedOrigins().contains("http://localhost:*"));
+    Assert.assertEquals("", transportErrors(config));
+  }
+
+  @Test
+  public void httpSettingsAreSharedByInstances() throws Exception {
+    List<Config> configs = load(
+        "Instances=a,b\nTransport=http\nHttpPort=9000\nHttpPath=db2\nHttpToken=${TOKEN}\nHttpAllowedOrigins=https://app.example.com\n",
+        Map.of("TOKEN", "t0ken"));
+    for (Config config : configs) {
+      Assert.assertEquals(9000, config.getHttpPort());
+      Assert.assertEquals("/db2", config.getHttpPath());
+      Assert.assertEquals("t0ken", config.getHttpToken());
+      Assert.assertEquals(List.of("https://app.example.com"), config.getHttpAllowedOrigins());
+    }
+  }
+
+  @Test
+  public void invalidTransportSettings() throws Exception {
+    Assert.assertTrue(transportErrors(load("Prefix=db2\nTransport=tcp\n").get(0)).contains("'Transport'"));
+    Assert.assertTrue(transportErrors(load("Prefix=db2\nTransport=http\nHttpPort=0\n").get(0)).contains("'HttpPort'"));
+    Assert.assertTrue(transportErrors(load("Prefix=db2\nTransport=http\nHttpPort=x\n").get(0)).contains("'HttpPort'"));
+    Assert.assertTrue(transportErrors(load("Prefix=db2\nTransport=http\nHttpPath=/a?b\n").get(0)).contains("'HttpPath'"));
+    // HTTP settings are ignored with stdio
+    Assert.assertEquals("", transportErrors(load("Prefix=db2\nHttpPort=x\n").get(0)));
+  }
+
+  @Test
+  public void listeningOnTheNetworkRequiresAToken() throws Exception {
+    String errors = transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=0.0.0.0\n").get(0));
+    Assert.assertTrue(errors, errors.contains("'HttpToken'"));
+    Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=0.0.0.0\nHttpToken=t\n").get(0)));
+    Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=localhost\n").get(0)));
+    Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=::1\n").get(0)));
+  }
 }
