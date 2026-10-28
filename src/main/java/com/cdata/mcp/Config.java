@@ -6,6 +6,7 @@ import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.security.KeyStore;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Driver;
@@ -13,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -47,6 +49,9 @@ public class Config {
   private static final String HTTP_PATH = "HttpPath";
   private static final String HTTP_TOKEN = "HttpToken";
   private static final String HTTP_ALLOWED_ORIGINS = "HttpAllowedOrigins";
+  private static final String HTTP_KEY_STORE = "HttpKeyStore";
+  private static final String HTTP_KEY_STORE_PASSWORD = "HttpKeyStorePassword";
+  private static final String HTTP_KEY_STORE_TYPE = "HttpKeyStoreType";
   // IBM's own schemas; SYSIBM% covers SYSIBMADM, SYSIBMTS, ... User schemas such as SYSADM are not included.
   private static final String DEFAULT_SYSTEM_SCHEMAS =
       "SYSIBM%, SYSCAT, SYSFUN, SYSSTAT, SYSPROC, SYSPUBLIC, SYSTOOLS, SYSACCEL, NULLID, SQLJ";
@@ -405,6 +410,31 @@ public class Config {
     return result;
   }
 
+  /** Keystore (PKCS12 or JKS) holding the HTTPS certificate and its private key; null serves plain HTTP. */
+  public String getHttpKeyStore() {
+    String value = this.props.getProperty(HTTP_KEY_STORE);
+    return isNullOrEmpty(value) || value.isBlank() ? null : value.trim();
+  }
+
+  public boolean isHttps() {
+    return getHttpKeyStore() != null;
+  }
+
+  /** Password of the keystore, also used for the private key. */
+  public String getHttpKeyStorePassword() {
+    return this.props.getProperty(HTTP_KEY_STORE_PASSWORD, "");
+  }
+
+  /** PKCS12, unless set or the file ends in .jks. */
+  public String getHttpKeyStoreType() {
+    String value = this.props.getProperty(HTTP_KEY_STORE_TYPE);
+    if (!isNullOrEmpty(value) && !value.isBlank()) {
+      return value.trim().toUpperCase(Locale.ROOT);
+    }
+    String path = getHttpKeyStore();
+    return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jks") ? "JKS" : "PKCS12";
+  }
+
   /** Checks the server-wide transport settings. */
   public boolean validateTransport(PrintStream errors) {
     String transport = getTransport();
@@ -432,7 +462,31 @@ public class Config {
           + " so the '" + HTTP_TOKEN + "' option is required");
       return false;
     }
-    return true;
+    return !isHttps() || verifyKeyStore(errors);
+  }
+
+  /** Opens the keystore now, so a wrong path or password stops the server with a clear message. */
+  private boolean verifyKeyStore(PrintStream errors) {
+    String path = getHttpKeyStore();
+    if (!new File(path).isFile()) {
+      errors.println("The '" + HTTP_KEY_STORE + "' option is not an existing file");
+      return false;
+    }
+    try (FileInputStream in = new FileInputStream(path)) {
+      KeyStore store = KeyStore.getInstance(getHttpKeyStoreType());
+      store.load(in, getHttpKeyStorePassword().toCharArray());
+      for (String alias : Collections.list(store.aliases())) {
+        if (store.isKeyEntry(alias)) {
+          return true;
+        }
+      }
+      errors.println("The keystore in the '" + HTTP_KEY_STORE + "' option has no private key and certificate");
+    } catch (Exception ex) {
+      // e.g. a wrong password or type; the message never contains the password
+      errors.println("The keystore in the '" + HTTP_KEY_STORE + "' option could not be opened"
+          + " (check '" + HTTP_KEY_STORE_PASSWORD + "' and '" + HTTP_KEY_STORE_TYPE + "'): " + ex.getMessage());
+    }
+    return false;
   }
 
   /** True when the address only accepts connections from this machine (localhost, 127.0.0.1, ::1). */

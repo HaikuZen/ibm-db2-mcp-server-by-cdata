@@ -143,6 +143,9 @@ With `Transport=http` the server starts an HTTP listener instead of reading stdi
 * **HttpPort** - (optional) the port, defaults to `8080`
 * **HttpPath** - (optional) the MCP endpoint path, defaults to `/mcp`
 * **HttpToken** - (optional on `127.0.0.1`) a secret that clients must send as `Authorization: Bearer <token>`; requests without it are rejected with `401`. Use an environment variable, e.g. `HttpToken=${DB2_MCP_TOKEN}`
+* **HttpKeyStore** - (optional) the full path to a PKCS12 (`.p12`, `.pfx`) or JKS (`.jks`) keystore holding the server's certificate and private key. When set, the server uses HTTPS instead of HTTP
+* **HttpKeyStorePassword** - the keystore's password, also used for the private key. Use an environment variable, e.g. `HttpKeyStorePassword=${DB2_MCP_KEYSTORE_PASSWORD}`
+* **HttpKeyStoreType** - (optional) `PKCS12` or `JKS`; by default `JKS` for `.jks` files and `PKCS12` otherwise
 * **HttpAllowedOrigins** - (optional) comma-separated origins whose web pages may call the server; `scheme://host:*` matches any port. Defaults to `localhost`, `127.0.0.1` and `[::1]` on any port, over `http` and `https`. Browsers send an `Origin` header and requests from other origins are rejected with `403`, so a web page cannot use your browser to reach the server. Most other clients send no `Origin` and are not affected
 
 ```env
@@ -164,7 +167,27 @@ It prints `MCP server listening on http://127.0.0.1:8080/mcp` on stderr. Then po
 ```
 or in Claude Code: `claude mcp add --transport http ibm-db2 http://127.0.0.1:8080/mcp --header "Authorization: Bearer change-me"`.
 
-> **Warning:** The listener uses plain `http://`, so nothing it sends is encrypted. On `127.0.0.1` the traffic never leaves the machine. If other machines connect, anyone who can see the network traffic can read the token and the query results, and reuse the token to run their own queries. Before setting `HttpHost` to a network address, put an encrypted layer in front of the server, such as an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 db2-mcp-host`, keeping `HttpHost=127.0.0.1`) or an HTTPS reverse proxy. Every client that connects queries DB2 with the account in the `.prp` file, so use one that can only read.
+> **Warning:** Without `HttpKeyStore` the listener uses plain `http://`, so nothing it sends is encrypted. On `127.0.0.1` the traffic never leaves the machine. If other machines connect, anyone who can see the network traffic can read the token and the query results, and reuse the token to run their own queries. Before setting `HttpHost` to a network address, enable HTTPS (below), or put an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 db2-mcp-host`, keeping `HttpHost=127.0.0.1`) or an HTTPS reverse proxy in front of the server. Every client that connects queries DB2 with the account in the `.prp` file, so use one that can only read.
+
+### HTTPS
+Set **HttpKeyStore** to serve `https://` with your certificate. The keystore is opened when the server starts, so a wrong path or password stops it with an error. Use a certificate from your organization's certificate authority, so clients trust it, and include in it every host name and IP address that clients use to connect. To convert a certificate and key in PEM format:
+```bash
+openssl pkcs12 -export -in server.crt -inkey server.key -certfile ca.crt -name mcp -out mcp.p12
+```
+For testing, `keytool` (shipped with Java) can create a self-signed certificate:
+```bash
+keytool -genkeypair -alias mcp -keyalg RSA -keysize 2048 -validity 365 -dname CN=db2-mcp-host \
+  -ext SAN=dns:db2-mcp-host,dns:localhost,ip:127.0.0.1 -keystore mcp.p12 -storetype PKCS12 -storepass change-me
+```
+```env
+Transport=http
+HttpHost=0.0.0.0
+HttpPort=8443
+HttpToken=${DB2_MCP_TOKEN}
+HttpKeyStore=/PATH/TO/mcp.p12
+HttpKeyStorePassword=${DB2_MCP_KEYSTORE_PASSWORD}
+```
+Clients then connect to `https://db2-mcp-host:8443/mcp`. A self-signed certificate must be added to each client's trusted certificates (for Node.js-based clients, `NODE_EXTRA_CA_CERTS=/PATH/TO/mcp.crt`, exported with `keytool -exportcert -rfc -alias mcp -keystore mcp.p12 -file mcp.crt`).
 ## Usage Details
 Once the MCP Server is configured, the AI client will be able to use the built-in tools to read the underlying data. In general, you do not need to call the tools explicitly. Simply ask the client to answer questions about the underlying data system. For example:
 * "What is the correlation between my closed won opportunities and the account industry?"

@@ -6,8 +6,10 @@ import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.security.KeyStore;
 import java.util.List;
 import java.util.Map;
 
@@ -278,5 +280,42 @@ public class ConfigTests {
     Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=0.0.0.0\nHttpToken=t\n").get(0)));
     Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=localhost\n").get(0)));
     Assert.assertEquals("", transportErrors(load("Prefix=db2\nTransport=http\nHttpHost=::1\n").get(0)));
+  }
+  @Test
+  public void plainHttpWithoutKeyStore() throws Exception {
+    Config config = load("Prefix=db2\nTransport=http\n").get(0);
+    Assert.assertFalse(config.isHttps());
+    Assert.assertNull(config.getHttpKeyStore());
+  }
+
+  @Test
+  public void keyStoreTypeFollowsTheFileName() throws Exception {
+    Assert.assertEquals("PKCS12", load("Prefix=db2\nHttpKeyStore=/k/mcp.p12\n").get(0).getHttpKeyStoreType());
+    Assert.assertEquals("JKS", load("Prefix=db2\nHttpKeyStore=/k/mcp.JKS\n").get(0).getHttpKeyStoreType());
+    Assert.assertEquals("JKS", load("Prefix=db2\nHttpKeyStore=/k/mcp.p12\nHttpKeyStoreType=jks\n").get(0).getHttpKeyStoreType());
+  }
+
+  @Test
+  public void keyStoreIsCheckedAtStartup() throws Exception {
+    // a valid keystore without a key: enough to check the path, password and content errors
+    File f = File.createTempFile("mcp", ".p12");
+    f.deleteOnExit();
+    KeyStore empty = KeyStore.getInstance("PKCS12");
+    empty.load(null, null);
+    try (FileOutputStream out = new FileOutputStream(f)) {
+      empty.store(out, "changeit".toCharArray());
+    }
+    String base = "Prefix=db2\nTransport=http\nHttpKeyStore=" + f.getPath().replace("\\", "/") + "\n";
+
+    Config config = load(base + "HttpKeyStorePassword=changeit\n").get(0);
+    Assert.assertTrue(config.isHttps());
+    Assert.assertTrue(transportErrors(config).contains("no private key"));
+
+    String wrong = transportErrors(load(base + "HttpKeyStorePassword=wrong\n").get(0));
+    Assert.assertTrue(wrong, wrong.contains("could not be opened"));
+    Assert.assertFalse(wrong, wrong.contains("wrong"));
+
+    String missing = transportErrors(load("Prefix=db2\nTransport=http\nHttpKeyStore=/no/such.p12\n").get(0));
+    Assert.assertTrue(missing, missing.contains("not an existing file"));
   }
 }

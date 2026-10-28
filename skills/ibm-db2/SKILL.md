@@ -26,13 +26,13 @@ Results are CSV with a header line. Extra text items after the CSV are notes fro
 The `Transport` setting in the server's `.prp` file chooses one of two ways:
 
 - **stdio** (the default): the MCP client starts the server itself (`command` and `args` in the client's MCP configuration, typically `java -jar CDataMCP-jar-with-dependencies.jar /path/to/file.prp`) and exchanges JSON-RPC messages over its stdin and stdout. There is no port or URL, so `curl` or a `url` / `serverUrl` entry cannot reach it, and a copy started by hand in a terminal is not the one the client uses. Closing its stdin stops it; that is normal at the end of a session.
-- **http** (`Transport=http`): the server is started separately and keeps running; clients connect to its URL, `http://HttpHost:HttpPort/HttpPath` (default `http://127.0.0.1:8080/mcp`, MCP Streamable HTTP), with a `url` / `serverUrl` entry. If `HttpToken` is set, the client must send `Authorization: Bearer <token>`. The server prints its URL on stderr when it starts.
+- **http** (`Transport=http`): the server is started separately and keeps running; clients connect to its URL, `http://HttpHost:HttpPort/HttpPath` (default `http://127.0.0.1:8080/mcp`, MCP Streamable HTTP), with a `url` / `serverUrl` entry; with `HttpKeyStore` set the URL starts with `https://`. If `HttpToken` is set, the client must send `Authorization: Bearer <token>`. The server prints its URL on stderr when it starts.
 
 If none of the tools above (`list_instances`, `help`, `*_run_query`, ...) are available to you, the client is not connected to the server; usually it exited at startup because of a configuration error, or the client points at the wrong place. Do not pretend to query DB2, and do not try to reach it another way. Tell the user, and point them at the usual causes:
 
 - The client entry must match the transport: `command`/`args` for stdio, the server's URL for http. A `command` entry for an http server starts a copy that never answers on stdin (and fails if another copy already has the port).
 - With stdio, use absolute paths to `java`, the JAR and the `.prp` file, and set every `${NAME}` variable used in the `.prp` in the entry's `env`: clients started from a desktop launcher do not inherit the user's shell variables.
-- With http, the server must be running; `401` means a missing or wrong token, `403` a browser page from an origin not in `HttpAllowedOrigins`.
+- With http, the server must be running; `401` means a missing or wrong token, `403` a browser page from an origin not in `HttpAllowedOrigins`. With HTTPS, the URL must start with `https://`, and a certificate error means the client does not trust the server's certificate (self-signed, or the host name used is not in it).
 - `DriverPath`, `LicensePath` and `LogFile` in the `.prp` must be absolute paths.
 - Every instance listed in `Instances=` must be reachable: the server checks each connection at startup and exits if one fails, printing the reason on stderr (and in `LogFile`, if set).
 - After fixing the configuration, restart or reconnect the server in the client and start a new conversation, so the tools are loaded.

@@ -28,8 +28,13 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.eclipse.jetty.ee11.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee11.servlet.ServletHolder;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.SslConnectionFactory;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 public class Program {
   
@@ -178,12 +183,12 @@ public class Program {
     };
   }
 
-  /** Serves the MCP endpoint (Streamable HTTP) on HttpHost:HttpPort. */
+  /** Serves the MCP endpoint (Streamable HTTP) on HttpHost:HttpPort, over HTTPS when HttpKeyStore is set. */
   private static Server startHttpServer(List<Config> configs, HttpServletStreamableServerTransportProvider transport)
       throws Exception {
     Config first = configs.get(0);
     Server server = new Server();
-    ServerConnector connector = new ServerConnector(server);
+    ServerConnector connector = first.isHttps() ? httpsConnector(server, first) : new ServerConnector(server);
     connector.setHost(first.getHttpHost());
     connector.setPort(first.getHttpPort());
     // a tool call's response stays silent while its query runs, so don't drop it before the query timeout
@@ -199,9 +204,23 @@ public class Program {
     server.start();
 
     String host = first.getHttpHost();
-    System.err.println("MCP server listening on http://" + (host.contains(":") ? "[" + host + "]" : host)
+    System.err.println("MCP server listening on " + (first.isHttps() ? "https" : "http") + "://"
+        + (host.contains(":") ? "[" + host + "]" : host)
         + ":" + connector.getLocalPort() + first.getHttpPath());
     return server;
+  }
+
+  private static ServerConnector httpsConnector(Server server, Config config) {
+    SslContextFactory.Server ssl = new SslContextFactory.Server();
+    ssl.setKeyStorePath(config.getHttpKeyStore());
+    ssl.setKeyStorePassword(config.getHttpKeyStorePassword());
+    ssl.setKeyStoreType(config.getHttpKeyStoreType());
+    HttpConfiguration https = new HttpConfiguration();
+    SecureRequestCustomizer secure = new SecureRequestCustomizer();
+    // clients often connect by IP address or a name the certificate doesn't list; they check the certificate themselves
+    secure.setSniHostCheck(false);
+    https.addCustomizer(secure);
+    return new ServerConnector(server, new SslConnectionFactory(ssl, "http/1.1"), new HttpConnectionFactory(https));
   }
 
   private static Duration idleTimeout(List<Config> configs) {

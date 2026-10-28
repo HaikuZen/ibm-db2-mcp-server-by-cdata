@@ -21,12 +21,17 @@ ServerVersion=1.0
 # These apply to the whole server: don't prefix them with an instance name.
 #Transport=http
 # 127.0.0.1 (default) accepts connections from this machine only. A network address such as
-# 0.0.0.0 requires HttpToken; traffic is not encrypted, so use an SSH tunnel or HTTPS proxy.
+# 0.0.0.0 requires HttpToken; also set HttpKeyStore, so the traffic is encrypted.
 #HttpHost=127.0.0.1
 #HttpPort=8080
 #HttpPath=/mcp
 # Clients must send "Authorization: Bearer <token>" (optional on 127.0.0.1)
 #HttpToken=${DB2_MCP_TOKEN}
+# HTTPS: PKCS12 (.p12/.pfx) or JKS (.jks) keystore with the certificate and its private key
+#HttpKeyStore=/PATH/TO/mcp.p12
+#HttpKeyStorePassword=${DB2_MCP_KEYSTORE_PASSWORD}
+# Optional: PKCS12 or JKS (default: JKS for .jks files, PKCS12 otherwise)
+#HttpKeyStoreType=PKCS12
 # Origins of web pages allowed to call the server (default: localhost on any port)
 #HttpAllowedOrigins=http://localhost:*, http://127.0.0.1:*
 
