@@ -1,6 +1,6 @@
 ---
 name: ibm-db2
-description: How to explore and query IBM DB2 databases (DB2 for z/OS, DB2 for Linux/UNIX/Windows, DB2 for IBM i) through the read-only IBM DB2 MCP server, whose tools are list_instances, help, and per-instance tools ending in _list_schemas, _get_tables, _table_stats, _get_columns, _describe_table, _search_columns and _run_query (e.g. prod_run_query). Use this skill whenever those tools are available and the user asks anything about data that may live in DB2 - counts, reports, trends, lookups, "which tables have...", "how big is...", comparing prod and test - or mentions DB2, Db2, the mainframe, z/OS, AS/400, iSeries, IBM i, a DB2 schema or table name, SQLCODE/SQLSTATE errors, or wants SQL written for DB2, even if they never say "DB2" or "MCP".
+description: How to explore and query IBM DB2 databases (DB2 for z/OS, DB2 for Linux/UNIX/Windows, DB2 for IBM i) through the read-only IBM DB2 MCP server, whose tools are list_instances, help, and per-instance tools ending in _list_schemas, _get_tables, _table_stats, _get_columns, _describe_table, _search_columns and _run_query (e.g. prod_run_query). Use this skill whenever those tools are available and the user asks anything about data that may live in DB2 - counts, reports, trends, lookups, "which tables have...", "how big is...", comparing prod and test - or mentions DB2, Db2, the mainframe, z/OS, AS/400, iSeries, IBM i, a DB2 schema or table name, SQLCODE/SQLSTATE errors, or wants SQL written for DB2, even if they never say "DB2" or "MCP". Also use it when the DB2 MCP server seems missing or not connected, or the user is configuring or testing it (it is a stdio-only server, not HTTP).
 ---
 
 # Querying IBM DB2 through the MCP server
@@ -20,6 +20,34 @@ The server gives read-only SQL access to one or more DB2 databases ("instances")
 | `<i>_run_query` | Run one `SELECT`, `WITH` or `VALUES` statement |
 
 Results are CSV with a header line. Extra text items after the CSV are notes from the server (rows cut off, schemas hidden, default schema): read them, they change what the CSV means.
+
+## 0. How the server is connected
+
+The server uses the MCP **stdio** transport only: the MCP client starts it as a local process (`command` and `args` in the client's MCP configuration, typically `java -jar CDataMCP-jar-with-dependencies.jar /path/to/file.prp`) and exchanges JSON-RPC messages over its stdin and stdout. It has no HTTP endpoint and listens on no port, so:
+
+- It cannot be reached with `curl`, a browser, or a `url` / `serverUrl` entry in the client configuration.
+- A copy started by hand in a terminal is not the one the client uses; the client always starts its own.
+- Closing its stdin stops it; that is normal at the end of a session.
+
+If none of the tools above (`list_instances`, `help`, `*_run_query`, ...) are available to you, the server is not running for this client; usually it exited at startup because of a configuration error. Do not pretend to query DB2, and do not try to reach it another way. Tell the user, and point them at the usual causes:
+
+- The client's MCP entry must use `command`/`args` (stdio), with absolute paths to `java`, the JAR and the `.prp` file.
+- Every `${NAME}` variable used in the `.prp` must be set in that entry's `env`: clients started from a desktop launcher do not inherit the user's shell variables.
+- `DriverPath`, `LicensePath` and `LogFile` in the `.prp` must be absolute paths.
+- Every instance listed in `Instances=` must be reachable: the server checks each connection at startup and exits if one fails, printing the reason on stderr (and in `LogFile`, if set).
+- After fixing the configuration, restart the server in the client and start a new conversation, so the tools are loaded.
+
+To test the server outside the client, pipe the protocol messages into it, keeping stdin open long enough for the replies:
+
+```bash
+( printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+  sleep 10 ) | java -jar /path/to/CDataMCP-jar-with-dependencies.jar /path/to/file.prp
+```
+
+A working server prints one JSON line per request; a misconfigured one prints an error and exits.
 
 ## 1. Orient yourself first
 
