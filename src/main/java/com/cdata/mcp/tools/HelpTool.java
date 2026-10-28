@@ -87,7 +87,7 @@ public class HelpTool implements ITool {
         .append("1. Find the data:\n")
         .append("   - `<instance>_list_schemas` lists the schemas with their number of tables (system schemas only with a `pattern` such as `SYS%`).\n")
         .append("   - `<instance>_get_tables` lists tables. Without `schema` it lists the instance's default schema if it has one, ")
-        .append("otherwise all schemas except DB2 system schemas (SYS*, NULLID, SQLJ). Pass `schema` to list one schema, or `%` for all.\n")
+        .append("otherwise all schemas except DB2 system schemas (such as SYSIBM and SYSCAT). Pass `schema` to list one schema, or `%` for all.\n")
         .append("   - `<instance>_search_columns` finds the tables that have a column, e.g. `column` = `%CUST%ID%`.\n")
         .append("2. Understand the tables:\n")
         .append("   - `<instance>_describe_table` gives the columns, primary key, foreign keys and indexes; use the keys for joins.\n")

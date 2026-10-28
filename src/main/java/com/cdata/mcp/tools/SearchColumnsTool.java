@@ -36,8 +36,8 @@ public class SearchColumnsTool implements ITool {
     String schema = new JsonSchemaBuilder()
         .addString("column", "Column name pattern, e.g. `%CUST%ID%` (% matches any characters, _ one character; DB2 stores unquoted names in upper case)")
         .addString("schema", isNullOrEmpty(defaultSchema)
-            ? "The schema name; when omitted, all schemas except DB2 system schemas (SYS*, NULLID, SQLJ) are searched"
-            : "The schema name; defaults to `" + defaultSchema + "`, pass `%` to search all schemas except DB2 system schemas (SYS*, NULLID, SQLJ)")
+            ? "The schema name; when omitted, all schemas except DB2 system schemas (" + config.getSystemSchemas() + ") are searched"
+            : "The schema name; defaults to `" + defaultSchema + "`, pass `%` to search all schemas except DB2 system schemas (" + config.getSystemSchemas() + ")")
         .addString("table", "Table name pattern to narrow the search")
         .required("column")
         .build();
@@ -70,7 +70,7 @@ public class SearchColumnsTool implements ITool {
       }
       try (Connection cn = config.newConnection()) {
         CsvUtils.RowFilter filter = allSchemas
-            ? rs -> !GetTablesTool.isSystemSchema(rs.getString("TABLE_SCHEM"))
+            ? rs -> !this.config.isSystemSchema(rs.getString("TABLE_SCHEM"))
             : null;
         CsvUtils.CsvResult result;
         try (ResultSet rs = cn.getMetaData().getColumns(null, allSchemas ? null : schema,
@@ -84,7 +84,7 @@ public class SearchColumnsTool implements ITool {
               + "Narrow the search with a more specific `column` pattern, `schema` or `table`."));
         }
         if (allSchemas) {
-          content.add(new McpSchema.TextContent("Columns in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to search them."));
+          content.add(new McpSchema.TextContent("Columns in DB2 system schemas (" + config.getSystemSchemas() + ") are not listed; pass `schema` to search them."));
         }
         return McpSchema.CallToolResult.builder().content(content).isError(false).build();
       }

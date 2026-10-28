@@ -37,6 +37,10 @@ public class Config {
   private static final String QUERY_TIMEOUT = "QueryTimeout";
   private static final String POOL_SIZE = "PoolSize";
   private static final String DEFAULT_SCHEMA = "DefaultSchema";
+  private static final String SYSTEM_SCHEMAS = "SystemSchemas";
+  // IBM's own schemas; SYSIBM% covers SYSIBMADM, SYSIBMTS, ... User schemas such as SYSADM are not included.
+  private static final String DEFAULT_SYSTEM_SCHEMAS =
+      "SYSIBM%, SYSCAT, SYSFUN, SYSSTAT, SYSPROC, SYSPUBLIC, SYSTOOLS, SYSACCEL, NULLID, SQLJ";
   private static final int DEFAULT_POOL_SIZE = 4;
   private static final int DEFAULT_MAX_ROWS = 1000;
   private static final int DEFAULT_QUERY_TIMEOUT = 60;
@@ -57,6 +61,7 @@ public class Config {
   private String identifierQuote;
   private boolean multipleCatalogs;
   private boolean multipleSchemas;
+  private List<Pattern> systemSchemaPatterns;
   private String productName;
   private String productVersion;
   private ConnectionPool pool;
@@ -286,6 +291,41 @@ public class Config {
     }
     Matcher m = DB2_URL.matcher(url.trim());
     return m.find() && m.group(group) != null ? m.group(group) : "";
+  }
+
+  /** Schemas left out when listing all schemas, as a comma-separated list of names (% matches any characters). */
+  public String getSystemSchemas() {
+    String list = String.join(", ", systemSchemaList());
+    return list.isEmpty() ? "none" : list;
+  }
+
+  public boolean isSystemSchema(String schema) {
+    if (schema == null) {
+      return false;
+    }
+    if (this.systemSchemaPatterns == null) {
+      List<Pattern> patterns = new ArrayList<>();
+      for (String name : systemSchemaList()) {
+        String regex = Pattern.quote(name.toUpperCase()).replace("%", "\\E.*\\Q");
+        patterns.add(Pattern.compile(regex));
+      }
+      this.systemSchemaPatterns = patterns;
+    }
+    // z/OS pads some schema names with blanks
+    String s = schema.trim().toUpperCase();
+    return this.systemSchemaPatterns.stream().anyMatch(p -> p.matcher(s).matches());
+  }
+
+  private List<String> systemSchemaList() {
+    // an empty SystemSchemas setting hides nothing; leaving it out uses IBM's schemas
+    String value = this.props.getProperty(SYSTEM_SCHEMAS, DEFAULT_SYSTEM_SCHEMAS);
+    List<String> names = new ArrayList<>();
+    for (String name : value.split(",")) {
+      if (!name.trim().isEmpty()) {
+        names.add(name.trim());
+      }
+    }
+    return names;
   }
 
   /** The configured DefaultSchema, or the one discovered for drivers without schema support. */

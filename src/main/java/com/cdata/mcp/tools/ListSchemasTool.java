@@ -34,7 +34,7 @@ public class ListSchemasTool implements ITool {
         McpSchema.Tool.builder()
             .name(config.getPrefix() + "_list_schemas")
             .description("Lists the schemas in the database with the number of tables and views in each. "
-                + "Without `pattern`, DB2 system schemas (SYS*, NULLID, SQLJ) are left out; pass e.g. `SYS%` to list them. "
+                + "Without `pattern`, DB2 system schemas (" + config.getSystemSchemas() + ") are left out; pass e.g. `SYS%` as `pattern` to list them. "
                 + "Use the `" + config.getPrefix() + "_get_tables` tool with `schema` to list a schema's tables. "
                 + Constants.FORMAT_DESC)
             .inputSchema(McpJsonDefaults.getMapper(), schema)
@@ -55,7 +55,7 @@ public class ListSchemasTool implements ITool {
         try (ResultSet rs = cn.getMetaData().getSchemas(null, emptyNull(pattern))) {
           while (rs.next()) {
             String name = rs.getString("TABLE_SCHEM").trim();
-            if (isNullOrEmpty(pattern) && GetTablesTool.isSystemSchema(name)) {
+            if (isNullOrEmpty(pattern) && this.config.isSystemSchema(name)) {
               continue;
             }
             csv.row()
@@ -68,7 +68,7 @@ public class ListSchemasTool implements ITool {
         List<McpSchema.Content> content = new ArrayList<>();
         content.add(new McpSchema.TextContent(csv.end()));
         if (isNullOrEmpty(pattern)) {
-          content.add(new McpSchema.TextContent("DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `pattern` to list them."));
+          content.add(new McpSchema.TextContent("DB2 system schemas (" + config.getSystemSchemas() + ") are not listed; pass `pattern` to list them."));
         }
         if (counts == null) {
           content.add(new McpSchema.TextContent("Table counts are not available for this DB2 platform."));

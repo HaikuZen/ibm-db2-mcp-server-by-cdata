@@ -35,6 +35,9 @@ MaxRows=1000
 QueryTimeout=60
 # Idle connections kept open for reuse per instance (0 = new connection per request)
 PoolSize=4
+# Schemas hidden when the tools list all schemas (% matches any characters; empty = hide none).
+# The default is IBM's own schemas, so user schemas such as SYSADM are listed:
+#SystemSchemas=SYSIBM%, SYSCAT, SYSFUN, SYSSTAT, SYSPROC, SYSPUBLIC, SYSTOOLS, SYSACCEL, NULLID, SQLJ
 
 # --- Instances ------------------------------------------------------------
 # Each name becomes the tool prefix (prod_get_tables, test_run_query, ...)

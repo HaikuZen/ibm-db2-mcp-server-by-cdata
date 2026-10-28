@@ -1,0 +1,6 @@
+# Maven build output
+target/
+
+# Real configuration files hold connection details and possibly passwords
+*.prp
+!*.example.prp

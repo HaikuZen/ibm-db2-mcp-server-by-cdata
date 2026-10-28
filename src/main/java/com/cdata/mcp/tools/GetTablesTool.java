@@ -28,8 +28,8 @@ public class GetTablesTool implements ITool {
   public void register(McpServer.SyncSpecification<?> mcp) throws Exception {
     String defaultSchema = config.defaultSchema();
     String schemaHelp = isNullOrEmpty(defaultSchema)
-        ? "DB2 system schemas (SYS*, NULLID, SQLJ) are only listed when requested with `schema`. "
-        : "When `schema` is omitted, tables in the `" + defaultSchema + "` schema are listed; pass `%` to list all schemas except DB2 system schemas (SYS*, NULLID, SQLJ). ";
+        ? "DB2 system schemas (" + config.getSystemSchemas() + ") are only listed when requested with `schema`. "
+        : "When `schema` is omitted, tables in the `" + defaultSchema + "` schema are listed; pass `%` to list all schemas except DB2 system schemas (" + config.getSystemSchemas() + "). ";
     String schema = new JsonSchemaBuilder()
         .addString("catalog", "The catalog name")
         .addString("schema", "The schema name (DB2 stores unquoted names in upper case)")
@@ -76,7 +76,7 @@ public class GetTablesTool implements ITool {
         }
         if (listsAllSchemas(schema)) {
           content.add(
-              new McpSchema.TextContent("Tables in DB2 system schemas (SYS*, NULLID, SQLJ) are not listed; pass `schema` to list them.")
+              new McpSchema.TextContent("Tables in DB2 system schemas (" + config.getSystemSchemas() + ") are not listed; pass `schema` to list them.")
           );
         }
         return McpSchema.CallToolResult.builder().content(content).isError(false).build();
@@ -101,7 +101,7 @@ public class GetTablesTool implements ITool {
     DatabaseMetaData meta = cn.getMetaData();
     // without a schema, DB2 would list thousands of catalog tables and views
     CsvUtils.RowFilter filter = listsAllSchemas(schema)
-        ? rs -> !isSystemSchema(rs.getString("TABLE_SCHEM"))
+        ? rs -> !this.config.isSystemSchema(rs.getString("TABLE_SCHEM"))
         : null;
     try (ResultSet rs = meta.getTables(emptyNull(catalog), listsAllSchemas(schema) ? null : schema, null, null)) {
       return CsvUtils.resultSetToCsv(rs, META_COLS.toArray(new String[0][]), filter);
@@ -112,11 +112,4 @@ public class GetTablesTool implements ITool {
     return isNullOrEmpty(schema) || schema.equals("%");
   }
 
-  public static boolean isSystemSchema(String schema) {
-    if (schema == null) {
-      return false;
-    }
-    String s = schema.trim().toUpperCase();
-    return s.startsWith("SYS") || s.equals("NULLID") || s.equals("SQLJ");
-  }
 }

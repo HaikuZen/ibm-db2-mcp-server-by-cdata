@@ -174,6 +174,49 @@ public class ConfigTests {
   }
 
   @Test
+  public void defaultSystemSchemas() throws Exception {
+    Config config = load("Prefix=db2\n").get(0);
+    for (String schema : new String[] { "SYSIBM", "SYSIBMADM", "SYSIBMTS", "SYSCAT", "SYSFUN", "SYSSTAT", "SYSPROC",
+        "SYSPUBLIC", "SYSTOOLS", "SYSACCEL", "NULLID", "SQLJ", "sysibm", "SYSIBM  " }) {
+      Assert.assertTrue(schema, config.isSystemSchema(schema));
+    }
+    // user schemas, including the z/OS SYSADM convention
+    for (String schema : new String[] { "SYSADM", "SYSTEMX", "SALES", "DB2INST1", "SQLJX" }) {
+      Assert.assertFalse(schema, config.isSystemSchema(schema));
+    }
+    Assert.assertFalse(config.isSystemSchema(null));
+    Assert.assertTrue(config.getSystemSchemas().startsWith("SYSIBM%, SYSCAT"));
+  }
+
+  @Test
+  public void systemSchemasCanBeReplacedPerInstance() throws Exception {
+    List<Config> configs = load("Instances=zos,i\nzos.SystemSchemas=SYS%, DSN%\ni.SystemSchemas=Q%,SYSIBM\n");
+    Config zos = configs.get(0);
+    Assert.assertTrue(zos.isSystemSchema("SYSADM"));
+    Assert.assertTrue(zos.isSystemSchema("DSNACC"));
+    Assert.assertFalse(zos.isSystemSchema("NULLID"));
+    Assert.assertEquals("SYS%, DSN%", zos.getSystemSchemas());
+    Config i = configs.get(1);
+    Assert.assertTrue(i.isSystemSchema("QSYS2"));
+    Assert.assertFalse(i.isSystemSchema("SYSIBMADM"));
+  }
+
+  @Test
+  public void emptySystemSchemasHidesNothing() throws Exception {
+    Config config = load("Prefix=db2\nSystemSchemas=\n").get(0);
+    Assert.assertFalse(config.isSystemSchema("SYSIBM"));
+    Assert.assertEquals("none", config.getSystemSchemas());
+  }
+
+  @Test
+  public void systemSchemaNamesAreNotRegexes() throws Exception {
+    Config config = load("Prefix=db2\nSystemSchemas=A.B, C$\n").get(0);
+    Assert.assertTrue(config.isSystemSchema("A.B"));
+    Assert.assertFalse(config.isSystemSchema("AXB"));
+    Assert.assertTrue(config.isSystemSchema("C$"));
+  }
+
+  @Test
   public void topLevelPrefixIsNotShared() throws Exception {
     List<Config> configs = load("Instances=a,b\nPrefix=db2\n");
     Assert.assertEquals("a", configs.get(0).getPrefix());
