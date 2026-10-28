@@ -6,11 +6,15 @@ import java.util.List;
 import java.util.Set;
 
 import com.cdata.mcp.resources.TableMetadataResource;
+import com.cdata.mcp.tools.DescribeTableTool;
 import com.cdata.mcp.tools.GetColumnsTool;
 import com.cdata.mcp.tools.GetTablesTool;
 import com.cdata.mcp.tools.HelpTool;
 import com.cdata.mcp.tools.ListInstancesTool;
+import com.cdata.mcp.tools.ListSchemasTool;
 import com.cdata.mcp.tools.RunQueryTool;
+import com.cdata.mcp.tools.SearchColumnsTool;
+import com.cdata.mcp.tools.TableStatsTool;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -123,8 +127,12 @@ public class Program {
   }
   private static void registerTools(Config config, McpServer.SyncSpecification<?> mcp) throws Exception {
     ITool[] tools = new ITool[] {
+        new ListSchemasTool(config),
         new GetTablesTool(config),
+        new TableStatsTool(config),
         new GetColumnsTool(config),
+        new DescribeTableTool(config),
+        new SearchColumnsTool(config),
         new RunQueryTool(config)
     };
     for (ITool tool : tools) {

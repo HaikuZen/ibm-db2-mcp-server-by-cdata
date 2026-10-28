@@ -21,6 +21,9 @@ import static com.cdata.mcp.StringUtil.isNullOrEmpty;
  */
 public class HelpTool implements ITool {
   public static final String NAME = "help";
+  /** Tool names of an instance are its prefix, '_' and one of these, in workflow order. */
+  public static final List<String> INSTANCE_TOOLS = List.of(
+      "list_schemas", "get_tables", "table_stats", "get_columns", "describe_table", "search_columns", "run_query");
   private List<Config> configs;
   private Logger logger = LoggerFactory.getLogger(HelpTool.class);
 
@@ -73,14 +76,23 @@ public class HelpTool implements ITool {
       }
       details.add(config.getMaxRows() > 0 ? "at most " + config.getMaxRows() + " rows per query" : "no row limit");
       details.add(config.getQueryTimeout() > 0 ? config.getQueryTimeout() + " s query timeout" : "no query timeout");
-      text.append(" (").append(String.join(", ", details)).append("): tools `")
-          .append(p).append("_get_tables`, `").append(p).append("_get_columns`, `").append(p).append("_run_query`\n");
+      List<String> tools = new ArrayList<>();
+      for (String tool : INSTANCE_TOOLS) {
+        tools.add("`" + p + "_" + tool + "`");
+      }
+      text.append(" (").append(String.join(", ", details)).append("): tools ").append(String.join(", ", tools)).append("\n");
     }
 
     text.append("\n## Workflow\n")
-        .append("1. `<instance>_get_tables` to find tables. Without `schema` it lists the instance's default schema if it has one, ")
+        .append("1. Find the data:\n")
+        .append("   - `<instance>_list_schemas` lists the schemas with their number of tables (system schemas only with a `pattern` such as `SYS%`).\n")
+        .append("   - `<instance>_get_tables` lists tables. Without `schema` it lists the instance's default schema if it has one, ")
         .append("otherwise all schemas except DB2 system schemas (SYS*, NULLID, SQLJ). Pass `schema` to list one schema, or `%` for all.\n")
-        .append("2. `<instance>_get_columns` with `table` (and `schema`) for the column names and data types.\n")
+        .append("   - `<instance>_search_columns` finds the tables that have a column, e.g. `column` = `%CUST%ID%`.\n")
+        .append("2. Understand the tables:\n")
+        .append("   - `<instance>_describe_table` gives the columns, primary key, foreign keys and indexes; use the keys for joins.\n")
+        .append("   - `<instance>_get_columns` gives just the column names and types.\n")
+        .append("   - `<instance>_table_stats` gives row counts and sizes from the catalog; check it before querying a large table.\n")
         .append("3. `<instance>_run_query` with one SQL statement.\n")
         .append("Results are CSV with a header line. Errors are returned as text with the DB2 SQLSTATE and SQLCODE; ")
         .append("correct the statement and try again.\n");

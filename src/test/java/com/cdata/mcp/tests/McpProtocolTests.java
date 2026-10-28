@@ -66,10 +66,15 @@ public class McpProtocolTests {
     Map<String, Object> result = (Map<String, Object>)request(2, "tools/list", Map.of()).get("result");
     List<Map<String, Object>> tools = (List<Map<String, Object>>)result.get("tools");
     List<String> names = tools.stream().map(t -> (String)t.get("name")).sorted().collect(Collectors.toList());
-    Assert.assertEquals(List.of(
-        "help", "list_instances",
-        "prod_get_columns", "prod_get_tables", "prod_run_query",
-        "test_get_columns", "test_get_tables", "test_run_query"), names);
+    List<String> expected = new java.util.ArrayList<>(List.of("help", "list_instances"));
+    for (String instance : List.of("prod", "test")) {
+      for (String tool : com.cdata.mcp.tools.HelpTool.INSTANCE_TOOLS) {
+        expected.add(instance + "_" + tool);
+      }
+    }
+    java.util.Collections.sort(expected);
+    Assert.assertEquals(expected, names);
+    Assert.assertEquals(2 + 2 * 7, names.size());
 
     Map<String, Object> runQuery = tools.stream().filter(t -> t.get("name").equals("prod_run_query")).findFirst().get();
     Map<String, Object> schema = (Map<String, Object>)runQuery.get("inputSchema");
@@ -111,7 +116,8 @@ public class McpProtocolTests {
   public void helpDescribesInstancesAndIsSentAsInstructions() throws Exception {
     String help = callText(6, "help");
     Assert.assertTrue(help.contains("- `prod` (database SALESDB on prod-host, default schema SALES, at most 500 rows per query, 60 s query timeout): "
-        + "tools `prod_get_tables`, `prod_get_columns`, `prod_run_query`"));
+        + "tools `prod_list_schemas`, `prod_get_tables`, `prod_table_stats`, `prod_get_columns`, `prod_describe_table`, "
+        + "`prod_search_columns`, `prod_run_query`"));
     Assert.assertTrue(help.contains("`test_run_query`"));
     Assert.assertTrue(help.contains("FETCH FIRST n ROWS ONLY"));
     Assert.assertFalse(help.contains("secret"));
@@ -122,6 +128,16 @@ public class McpProtocolTests {
     Map<String, Object> result = (Map<String, Object>)request(id, "tools/call", Map.of("name", tool, "arguments", Map.of())).get("result");
     Assert.assertNotEquals(Boolean.TRUE, result.get("isError"));
     return (String)((List<Map<String, Object>>)result.get("content")).get(0).get("text");
+  }
+
+  @Test(timeout = 20000)
+  public void tableStatsNeedsAKnownPlatform() throws Exception {
+    // no database here, so the platform is unknown
+    Map<String, Object> result = (Map<String, Object>)request(7, "tools/call", Map.of(
+        "name", "prod_table_stats", "arguments", Map.of())).get("result");
+    Assert.assertEquals(Boolean.TRUE, result.get("isError"));
+    Assert.assertEquals("ERROR: Table statistics are not available for this DB2 platform",
+        ((List<Map<String, Object>>)result.get("content")).get(0).get("text"));
   }
 
   @Test(timeout = 20000)

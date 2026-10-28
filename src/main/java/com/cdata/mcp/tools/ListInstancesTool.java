@@ -40,8 +40,8 @@ public class ListInstancesTool implements ITool {
     this.logger.info("ListInstancesTool()");
     List<McpSchema.Content> content = new ArrayList<>();
     content.add(new McpSchema.TextContent(toCsv(this.configs)));
-    content.add(new McpSchema.TextContent("The tools of an instance are named <Instance>_get_tables, "
-        + "<Instance>_get_columns and <Instance>_run_query."));
+    content.add(new McpSchema.TextContent("The tools of an instance are named <Instance>_<tool>, with <tool> one of: "
+        + String.join(", ", HelpTool.INSTANCE_TOOLS) + "."));
     return McpSchema.CallToolResult.builder().content(content).isError(false).build();
   }
 

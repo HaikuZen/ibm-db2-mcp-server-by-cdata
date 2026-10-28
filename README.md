@@ -144,6 +144,10 @@ The list of tools available and their descriptions follow:
 In the definitions below, `{servername}` refers to the name of the MCP Server in the config file (e.g. `{classname_dash}` above).
 * `{servername}_get_tables` - Retrieves a list of tables available in the data source. Use the `{servername}_get_columns` tool to list available columns on a table. When `schema` is omitted, the `DefaultSchema` is listed if one is configured (pass `%` to list all schemas); otherwise all schemas are listed except DB2 system schemas (`SYS*`, `NULLID`, `SQLJ`), which are only listed when the `schema` argument names one. The output of the tool will be returned in CSV format, with the first line containing column headers.
 * `{servername}_get_columns` - Retrieves a list of columns for a table. Use the `{servername}_get_tables` tool to get a list of available tables. The output of the tool will be returned in CSV format, with the first line containing column headers.
+* `{servername}_list_schemas` - Lists the schemas with the number of tables and views in each. DB2 system schemas are only listed when a `pattern` such as `SYS%` is given.
+* `{servername}_describe_table` - Describes a table: columns (type, size, nullability, default), primary key, foreign keys, the foreign keys that reference it, and indexes. When no `schema` is given and there is no `DefaultSchema`, the schema is found from the table name.
+* `{servername}_search_columns` - Finds columns by name pattern (e.g. `%CUST%ID%`) and lists the tables that contain them. Results are capped at `MaxRows`.
+* `{servername}_table_stats` - Row count, pages, size in KB and statistics date for each table in a schema, read from the DB2 catalog (`SYSIBM.SYSTABLES` on z/OS, `SYSCAT.TABLES` on Linux/UNIX/Windows, `QSYS2.SYSTABLESTAT` on IBM i) without reading the tables. On z/OS and LUW the figures come from the last RUNSTATS.
 * `{servername}_run_query` - Execute a SQL SELECT query
 
 The server also has two tools that cover all instances:

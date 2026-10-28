@@ -63,6 +63,19 @@ public class CsvUtilsTests {
   }
 
   @Test
+  public void limitCountsOnlyFilteredRows() throws Exception {
+    CsvUtils.RowFilter even = rs -> Integer.parseInt(rs.getString(1)) % 2 == 0;
+    CsvUtils.CsvResult result = CsvUtils.limitedResultSetToCsv(rows(9), null, even, 3);
+    Assert.assertEquals("\"ID\"\n\"2\"\n\"4\"\n\"6\"\n", result.csv());
+    Assert.assertTrue(result.truncated());
+
+    // rows after the last accepted one do not count as truncation
+    result = CsvUtils.limitedResultSetToCsv(rows(7), null, even, 3);
+    Assert.assertEquals(3, result.rows());
+    Assert.assertFalse(result.truncated());
+  }
+
+  @Test
   public void noLimit() throws Exception {
     CsvUtils.CsvResult result = CsvUtils.limitedResultSetToCsv(rows(5), 0);
     Assert.assertEquals(5, result.rows());
