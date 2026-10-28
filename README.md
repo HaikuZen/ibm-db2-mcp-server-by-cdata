@@ -155,6 +155,13 @@ The server also has two tools that cover all instances:
 * `list_instances` - Lists the configured DB2 instances: tool prefix, platform (z/OS, LUW or IBM i), product version, host, port, database, default schema and limits. Credentials and JDBC URL properties are never included.
 * `help` - Returns instructions for the AI client: each instance's tools, the recommended workflow, the read-only rules and limits, and DB2 SQL tips for the platforms in use. The same text is sent as the server's MCP `instructions` when a client connects.
 
+## Agent Skill
+The [`skills/ibm-db2`](./skills/ibm-db2/SKILL.md) folder contains an Agent Skill that teaches Claude how to use this server well: orienting with `list_instances`, finding tables before querying them, writing DB2 SQL (`FETCH FIRST`, upper-case names, legacy date columns, integer division), keeping queries cheap on production systems, and fixing common `SQLCODE` errors. Platform details for DB2 for z/OS, Linux/UNIX/Windows and IBM i are in `skills/ibm-db2/references/` and are only loaded when needed.
+
+* **Claude Code**: copy the folder to `~/.claude/skills/ibm-db2/` (all projects) or `.claude/skills/ibm-db2/` (one project).
+* **Claude Desktop / claude.ai**: zip the `ibm-db2` folder and upload it under *Settings → Capabilities → Skills*.
+* **Google Antigravity**: copy the folder to `<workspace>/.agents/skills/ibm-db2/` (one workspace, recommended) or to the global skills folder: `~/.gemini/config/skills/ibm-db2/` for the IDE and app (older versions: `~/.gemini/antigravity/skills/ibm-db2/`), `~/.gemini/antigravity-cli/skills/ibm-db2/` for the CLI. The Customizations menu in the agent side panel shows whether the skill was loaded. Configure the MCP server in Antigravity too, with the same `command`, `args` and `env` as for Claude Desktop.
+
 ## JSON-RPC Request Examples
 If you are scripting out the requests sent to the MCP Server instead of using an AI Client (e.g. Claude), then you can refer to the JSON payload examples below – following the JSON-RPC 2.0 specification - when calling the available tools. 
 
