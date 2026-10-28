@@ -141,6 +141,62 @@ public class McpProtocolTests {
   }
 
   @Test(timeout = 20000)
+  public void schemasAreAcceptedByGemini() throws Exception {
+    // Gemini function declarations reject "$schema", empty "required" and objects without properties
+    Map<String, Object> result = (Map<String, Object>)request(8, "tools/list", Map.of()).get("result");
+    for (Map<String, Object> tool : (List<Map<String, Object>>)result.get("tools")) {
+      String name = (String)tool.get("name");
+      Map<String, Object> schema = (Map<String, Object>)tool.get("inputSchema");
+      Assert.assertTrue(name, name.matches("[A-Za-z_][A-Za-z0-9_.-]{0,63}"));
+      Assert.assertEquals(name, "object", schema.get("type"));
+      Assert.assertFalse(name, ((Map<String, Object>)schema.get("properties")).isEmpty());
+      for (String key : schema.keySet()) {
+        Assert.assertTrue(name + " has " + key, List.of("type", "properties", "required").contains(key));
+      }
+      if (schema.containsKey("required")) {
+        Assert.assertFalse(name, ((List<?>)schema.get("required")).isEmpty());
+      }
+    }
+  }
+
+  @Test(timeout = 20000)
+  public void callWithoutArgumentsWorks() throws Exception {
+    // the MCP spec allows leaving out "arguments"
+    Map<String, Object> response = request(9, "tools/call", Map.of("name", "list_instances"));
+    Map<String, Object> result = (Map<String, Object>)response.get("result");
+    Assert.assertNotNull(response.toString(), result);
+    Assert.assertNotEquals(Boolean.TRUE, result.get("isError"));
+  }
+
+  @Test(timeout = 20000)
+  public void promptsListIsEmpty() throws Exception {
+    Map<String, Object> result = (Map<String, Object>)request(10, "prompts/list", Map.of()).get("result");
+    Assert.assertEquals(List.of(), result.get("prompts"));
+  }
+
+  @Test(timeout = 20000)
+  public void instanceFilter() throws Exception {
+    Map<String, Object> result = (Map<String, Object>)request(11, "tools/call", Map.of(
+        "name", "list_instances", "arguments", Map.of("instance", "TEST"))).get("result");
+    String csv = (String)((List<Map<String, Object>>)result.get("content")).get(0).get("text");
+    Assert.assertEquals(2, csv.lines().count());
+    Assert.assertTrue(csv.contains("\"test\""));
+
+    result = (Map<String, Object>)request(12, "tools/call", Map.of(
+        "name", "help", "arguments", Map.of("instance", "nope"))).get("result");
+    Assert.assertEquals(Boolean.TRUE, result.get("isError"));
+    Assert.assertEquals("ERROR: Unknown instance 'nope'; the instances are: prod, test",
+        ((List<Map<String, Object>>)result.get("content")).get(0).get("text"));
+
+    result = (Map<String, Object>)request(13, "tools/call", Map.of(
+        "name", "help", "arguments", Map.of("instance", "prod"))).get("result");
+    String help = (String)((List<Map<String, Object>>)result.get("content")).get(0).get("text");
+    Assert.assertTrue(help.contains("access to 2 IBM DB2 instances"));
+    Assert.assertTrue(help.contains("`prod_run_query`"));
+    Assert.assertFalse(help.contains("`test_run_query`"));
+  }
+
+  @Test(timeout = 20000)
   public void writeStatementIsReturnedAsToolError() throws Exception {
     Map<String, Object> response = request(3, "tools/call", Map.of(
         "name", "prod_run_query",

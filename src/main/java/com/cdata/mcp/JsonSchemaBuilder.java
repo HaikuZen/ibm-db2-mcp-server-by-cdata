@@ -10,7 +10,6 @@ public class JsonSchemaBuilder {
   public static final String NUMBER = "number";
   public static final String BOOLEAN = "boolean";
   public static final String OBJECT = "object";
-  public static final String SCHEMA_REF = "http://json-schema.org/draft-07/schema#";
 
   private List<Property> properties = new ArrayList<>();
   private List<String> required = new ArrayList<>();
@@ -47,11 +46,13 @@ public class JsonSchemaBuilder {
       props.put(p.name(), prop);
     }
 
+    // Gemini-based clients reject "$schema" and an empty "required", so neither is written
     Map<String, Object> obj = new LinkedHashMap<>();
-    obj.put("$schema", SCHEMA_REF);
     obj.put("type", OBJECT);
     obj.put("properties", props);
-    obj.put("required", this.required);
+    if (!this.required.isEmpty()) {
+      obj.put("required", this.required);
+    }
     return McpJsonDefaults.getMapper().writeValueAsString(obj);
   }
 

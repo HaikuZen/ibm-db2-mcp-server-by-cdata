@@ -39,25 +39,39 @@ public class HelpTool implements ITool {
             .description("Returns instructions for using this IBM DB2 server: the available instances and their tools, "
                 + "the recommended workflow, the read-only rules and limits, and DB2 SQL tips. "
                 + "Call it before the first query if unsure how to proceed.")
-            .inputSchema(McpJsonDefaults.getMapper(), new JsonSchemaBuilder().build())
+            .inputSchema(McpJsonDefaults.getMapper(), new JsonSchemaBuilder()
+                .addString("instance", "Only describe this instance (its prefix); when omitted, all instances are described")
+                .build())
             .build(),
-        (exchange, request) -> run(request.arguments())
+        (exchange, request) -> run(ITool.arguments(request))
     );
   }
 
   @Override
   public McpSchema.CallToolResult run(Map<String, Object> args) {
-    this.logger.info("HelpTool()");
+    String instance = (String)args.get("instance");
+    this.logger.info("HelpTool({})", instance);
+    List<Config> selected;
+    try {
+      selected = ListInstancesTool.select(this.configs, instance);
+    } catch (IllegalArgumentException ex) {
+      return ErrorUtil.toolError(ex);
+    }
     List<McpSchema.Content> content = new ArrayList<>();
-    content.add(new McpSchema.TextContent(instructions(this.configs)));
+    content.add(new McpSchema.TextContent(instructions(this.configs, selected)));
     return McpSchema.CallToolResult.builder().content(content).isError(false).build();
   }
 
   public static String instructions(List<Config> configs) {
+    return instructions(configs, configs);
+  }
+
+  /** Instructions for the server with all configs, describing only the shown ones. */
+  private static String instructions(List<Config> all, List<Config> configs) {
     StringBuilder text = new StringBuilder();
     text.append("# IBM DB2 MCP Server\n\n")
-        .append("Read-only SQL access to ").append(configs.size())
-        .append(configs.size() == 1 ? " IBM DB2 instance" : " IBM DB2 instances")
+        .append("Read-only SQL access to ").append(all.size())
+        .append(all.size() == 1 ? " IBM DB2 instance" : " IBM DB2 instances")
         .append(". `").append(ListInstancesTool.NAME).append("` lists them with their details.\n\n");
 
     text.append("## Instances\n");

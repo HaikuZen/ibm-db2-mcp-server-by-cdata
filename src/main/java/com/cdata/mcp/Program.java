@@ -1,5 +1,8 @@
 package com.cdata.mcp;
 
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
@@ -57,7 +60,7 @@ public class Program {
       System.exit(-1);
     }
 
-    this.transport = new StdioServerTransportProvider(McpJsonDefaults.getMapper());
+    this.transport = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), exitOnEndOfInput(System.in), System.out);
   }
 
   public void configureMcp() throws Exception {
@@ -74,6 +77,8 @@ public class Program {
                 McpSchema.ServerCapabilities.builder()
                     .tools(true)
                     .resources(false, true)
+                    // no prompts, but some clients ask for them regardless; answer with an empty list
+                    .prompts(false)
                     //.logging()
                     .build()
             );
@@ -100,21 +105,50 @@ public class Program {
     if (!STDIO) {
       //p.runHttpServer();
     } else {
-      Runtime.getRuntime().addShutdownHook(new Thread() {
-        public void run() {
-          synchronized (p) {
-            p.notify();
-          }
-        }
-      });
+      // runs on SIGTERM and on the System.exit() made when the client closes stdin
+      Runtime.getRuntime().addShutdownHook(new Thread(p::shutdown));
       synchronized (p) {
-        p.wait();
-        p.mcpServer.closeGracefully();
-        for (Config config : p.configs) {
-          config.close();
+        while (true) {
+          p.wait();
         }
       }
     }
+  }
+
+  private void shutdown() {
+    this.mcpServer.closeGracefully();
+    for (Config config : this.configs) {
+      config.close();
+    }
+  }
+
+  /**
+   * The client ends a stdio session by closing our stdin. The SDK then closes the session but leaves
+   * the process running, so exit: otherwise every client restart leaves a JVM (and its DB2 connections) behind.
+   */
+  private static InputStream exitOnEndOfInput(InputStream in) {
+    return new FilterInputStream(in) {
+      private boolean exiting;
+
+      @Override
+      public int read() throws IOException {
+        return check(super.read());
+      }
+
+      @Override
+      public int read(byte[] b, int off, int len) throws IOException {
+        return check(super.read(b, off, len));
+      }
+
+      private int check(int result) {
+        if (result < 0 && !this.exiting) {
+          this.exiting = true;
+          // not on this thread: shutting down closes the transport, which waits for this reader
+          new Thread(() -> System.exit(0), "stdin-closed").start();
+        }
+        return result;
+      }
+    };
   }
 
   private static void registerResources(Config config, McpServer.SyncSpecification<?> mcp) throws SQLException {

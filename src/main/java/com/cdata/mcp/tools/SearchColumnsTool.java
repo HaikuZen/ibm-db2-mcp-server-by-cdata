@@ -50,7 +50,7 @@ public class SearchColumnsTool implements ITool {
                 + Constants.FORMAT_DESC)
             .inputSchema(McpJsonDefaults.getMapper(), schema)
             .build(),
-        (exchange, request) -> run(request.arguments())
+        (exchange, request) -> run(ITool.arguments(request))
     );
   }
 

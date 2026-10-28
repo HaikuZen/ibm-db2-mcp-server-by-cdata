@@ -49,7 +49,7 @@ public class RunQueryTool implements ITool {
             .description("Execute a SQL SELECT statement.")
             .inputSchema(McpJsonDefaults.getMapper(), schema)
             .build(),
-        (exchange, request) -> run(request.arguments())
+        (exchange, request) -> run(ITool.arguments(request))
     );
   }
 

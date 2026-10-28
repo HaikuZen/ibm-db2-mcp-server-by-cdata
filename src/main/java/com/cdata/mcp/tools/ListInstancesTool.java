@@ -29,20 +29,44 @@ public class ListInstancesTool implements ITool {
             .description("Lists the IBM DB2 instances this server can query, with their platform, database, "
                 + "default schema and limits. The `Instance` column is the prefix of that instance's tools. "
                 + "Use the `" + HelpTool.NAME + "` tool for instructions. " + Constants.FORMAT_DESC)
-            .inputSchema(McpJsonDefaults.getMapper(), new JsonSchemaBuilder().build())
+            .inputSchema(McpJsonDefaults.getMapper(), new JsonSchemaBuilder()
+                .addString("instance", "Only list this instance (its prefix); when omitted, all instances are listed")
+                .build())
             .build(),
-        (exchange, request) -> run(request.arguments())
+        (exchange, request) -> run(ITool.arguments(request))
     );
   }
 
   @Override
   public McpSchema.CallToolResult run(Map<String, Object> args) {
-    this.logger.info("ListInstancesTool()");
+    String instance = (String)args.get("instance");
+    this.logger.info("ListInstancesTool({})", instance);
+    List<Config> selected;
+    try {
+      selected = select(this.configs, instance);
+    } catch (IllegalArgumentException ex) {
+      return ErrorUtil.toolError(ex);
+    }
     List<McpSchema.Content> content = new ArrayList<>();
-    content.add(new McpSchema.TextContent(toCsv(this.configs)));
+    content.add(new McpSchema.TextContent(toCsv(selected)));
     content.add(new McpSchema.TextContent("The tools of an instance are named <Instance>_<tool>, with <tool> one of: "
         + String.join(", ", HelpTool.INSTANCE_TOOLS) + "."));
     return McpSchema.CallToolResult.builder().content(content).isError(false).build();
+  }
+
+  /** All instances, or only the one with this prefix. */
+  public static List<Config> select(List<Config> configs, String instance) {
+    if (StringUtil.isNullOrEmpty(instance)) {
+      return configs;
+    }
+    List<String> prefixes = new ArrayList<>();
+    for (Config config : configs) {
+      if (config.getPrefix().equalsIgnoreCase(instance.trim())) {
+        return List.of(config);
+      }
+      prefixes.add(config.getPrefix());
+    }
+    throw new IllegalArgumentException("Unknown instance '" + instance + "'; the instances are: " + String.join(", ", prefixes));
   }
 
   public static String toCsv(List<Config> configs) {

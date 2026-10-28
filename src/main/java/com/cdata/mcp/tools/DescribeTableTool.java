@@ -77,7 +77,7 @@ public class DescribeTableTool implements ITool {
                 + "Use the keys to join tables correctly. Each section is in CSV format, with the first line containing column headers.")
             .inputSchema(McpJsonDefaults.getMapper(), schema)
             .build(),
-        (exchange, request) -> run(request.arguments())
+        (exchange, request) -> run(ITool.arguments(request))
     );
   }
 
